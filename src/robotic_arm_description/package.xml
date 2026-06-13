@@ -17,5 +17,8 @@
 
   <export>
     <build_type>ament_cmake</build_type>
+    <!-- Gazebo Harmonic mesh resolution: adds share/ to GZ_SIM_RESOURCE_PATH
+         so model://robotic_arm_description/meshes/*.STL can be found. -->
+    <gazebo_ros gazebo_model_path="${prefix}/.."/>
   </export>
 </package>
