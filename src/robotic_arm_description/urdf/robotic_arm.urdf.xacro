@@ -12,23 +12,45 @@
     ║  translation offset — and rpy="1.6757 0.094954 1.9904".       ║
     ║                                                               ║
     ║  CHANGES MADE:                                                ║
-    ║  1. joint0 xyz zeroed → arm base sits at world origin.        ║
-    ║  2. joint0 rpy kept unchanged: it encodes the actual physical  ║
+    ║  1. world_joint added (world → base_link, fixed) with a small ║
+    ║     corrective pitch to level the arm on the ground plane.    ║
+    ║     Adjust world_joint rpy pitch if the tilt looks wrong.     ║
+    ║  2. joint0 xyz zeroed → arm base sits at world origin.        ║
+    ║  3. joint0 rpy kept unchanged: it encodes the actual physical ║
     ║     mounting orientation of lower_arm on the base plate.      ║
-    ║     If the arm appears tilted in RViz, verify with hardware   ║
-    ║     and zero rpy if needed.                                   ║
-    ║  3. base_link visual/collision origin shifted by              ║
+    ║  4. base_link visual/collision origin shifted by              ║
     ║     −(joint0_xyz) = (−0.70796, 1.3272, −0.9075) so the base  ║
     ║     plate mesh re-aligns with the arm at world origin.        ║
     ║     (base_link.STL vertices are in SW world coordinates.)     ║
-    ║  4. base_link inertial COM is still in SW world coords —      ║
+    ║  5. base_link inertial COM is still in SW world coords —      ║
     ║     correct it before enabling simulation/dynamics.           ║
-    ║  5. joint6 limits corrected: −1.57..0 (finger closes pos→0). ║
-    ║  6. joint7 limits corrected: 0..1.57, mimic joint6 ×(−1).   ║
-    ║  7. All mesh URIs updated: Robotic_Arm → robotic_arm_description║
-    ║  8. joint1–7 origins: UNTOUCHED (relative transforms exact). ║
+    ║  6. joint6 limits corrected: −1.57..0 (finger closes pos→0). ║
+    ║  7. joint7 limits corrected: −1.57..0, mimic joint6 ×(+1).  ║
+    ║     Multiplier is +1 because joint6/joint7 frames are rotated ║
+    ║     180° in yaw, making their local Z axes antiparallel in    ║
+    ║     the parent frame. Equal joint values → opposite world     ║
+    ║     rotations → symmetric pinch. multiplier=−1 (wrong) caused ║
+    ║     both fingers to rotate in the same world direction.       ║
+    ║  8. All mesh URIs updated: Robotic_Arm → robotic_arm_description║
+    ║  9. joint1–7 origins: UNTOUCHED (relative transforms exact). ║
     ╚═══════════════════════════════════════════════════════════════╝
   -->
+
+  <!-- ═══════ world ══════════════════════════════════════════════ -->
+  <!-- Massless anchor so RViz/Nav2 have a stable "world" fixed frame. -->
+  <link name="world"/>
+
+  <!--
+    world_joint — world → base_link  (fixed)
+    The small corrective pitch (−0.095 rad ≈ −5.4°) counteracts the
+    residual tilt from joint0's SW-exported pitch component.
+    Tune this rpy if the arm still looks tilted in RViz.
+  -->
+  <joint name="world_joint" type="fixed">
+    <origin xyz="0 0 0" rpy="0 -0.094954 0"/>
+    <parent link="world"/>
+    <child  link="base_link"/>
+  </joint>
 
   <!-- ═══════ base_link ═══════════════════════════════════════════ -->
   <link name="base_link">
@@ -341,10 +363,13 @@
   <!--
     joint7 — gripper_actuator → gripper_2  (right finger)
     CHANGED limits: lower was -0.2, upper was 1.57.
-      Corrected to lower="0" upper="1.57":
-      mirrors joint6; right finger opens toward positive.
-    ADDED mimic: joint7 = −1 × joint6 + 0
-      Both fingers move symmetrically; only joint6 needs a command.
+      Corrected to lower="-1.57" upper="0" (matches joint6).
+    ADDED mimic: joint7 = +1 × joint6 + 0
+      multiplier=+1 because joint6 frame (rpy="...0") and joint7 frame
+      (rpy="...3.1416") are 180° apart in yaw, making their local Z
+      axes antiparallel in the parent frame.  Equal values → opposite
+      physical rotations → symmetric pinch/open.  multiplier=−1 was
+      wrong: it caused both fingers to sweep the same world direction.
     Origin UNCHANGED.
   -->
   <joint name="joint7" type="revolute">
@@ -352,8 +377,8 @@
     <parent link="gripper_actuator"/>
     <child  link="gripper_2"/>
     <axis xyz="0 0 1"/>
-    <limit lower="0" upper="1.57" effort="2" velocity="1"/>
-    <mimic joint="joint6" multiplier="-1" offset="0"/>
+    <limit lower="-1.57" upper="0" effort="2" velocity="1"/>
+    <mimic joint="joint6" multiplier="1" offset="0"/>
   </joint>
 
 </robot>
