@@ -1,0 +1,30 @@
+# Per-group OMPL planner selection.
+# The planning plugin and request/response adapters are configured in demo.launch.py.
+
+arm:
+  default_planner_config: RRTConnectkConfigDefault
+  planner_configs:
+    - RRTConnectkConfigDefault
+    - RRTkConfigDefault
+    - PRMkConfigDefault
+  projection_evaluator: joints(joint0,joint1)
+  longest_valid_segment_fraction: 0.005
+
+gripper:
+  default_planner_config: RRTConnectkConfigDefault
+  planner_configs:
+    - RRTConnectkConfigDefault
+
+planner_configs:
+  RRTConnectkConfigDefault:
+    type: geometric::RRTConnect
+    range: 0.0          # auto
+
+  RRTkConfigDefault:
+    type: geometric::RRT
+    range: 0.0
+    goal_bias: 0.05
+
+  PRMkConfigDefault:
+    type: geometric::PRM
+    max_nearest_neighbors: 10

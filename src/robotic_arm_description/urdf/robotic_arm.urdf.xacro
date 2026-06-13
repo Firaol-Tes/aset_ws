@@ -389,4 +389,71 @@
     <mimic joint="joint6" multiplier="1" offset="0"/>
   </joint>
 
+  <!-- ═══════ ros2_control hardware interface ══════════════════════
+       mock_components/GenericSystem simulates hardware for the demo.
+       Swap the plugin for a real driver (e.g. serial, EtherCAT) in
+       production.  joint7 is declared as a mimic so controller_manager
+       keeps its state in sync with joint6 automatically.
+  ══════════════════════════════════════════════════════════════════ -->
+  <ros2_control name="robotic_arm_system" type="system">
+    <hardware>
+      <plugin>mock_components/GenericSystem</plugin>
+    </hardware>
+
+    <joint name="joint0">
+      <command_interface name="position">
+        <param name="min">-3.14</param><param name="max">3.14</param>
+      </command_interface>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+    </joint>
+    <joint name="joint1">
+      <command_interface name="position">
+        <param name="min">-3.14</param><param name="max">3.14</param>
+      </command_interface>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+    </joint>
+    <joint name="joint2">
+      <command_interface name="position">
+        <param name="min">-3.14</param><param name="max">3.14</param>
+      </command_interface>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+    </joint>
+    <joint name="joint3">
+      <command_interface name="position">
+        <param name="min">-3.14</param><param name="max">3.14</param>
+      </command_interface>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+    </joint>
+    <joint name="joint4">
+      <command_interface name="position">
+        <param name="min">-3.14</param><param name="max">3.14</param>
+      </command_interface>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+    </joint>
+    <joint name="joint5">
+      <command_interface name="position">
+        <param name="min">-3.14</param><param name="max">3.14</param>
+      </command_interface>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+    </joint>
+    <joint name="joint6">
+      <command_interface name="position">
+        <param name="min">-0.093</param><param name="max">1.57</param>
+      </command_interface>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+    </joint>
+    <!-- joint7 is a URDF mimic joint: ros2_control 4.x forbids command interfaces on mimic joints. -->
+    <joint name="joint7">
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+    </joint>
+  </ros2_control>
+
 </robot>
