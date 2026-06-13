@@ -321,10 +321,9 @@
 
   <!--
     joint6 — gripper_actuator → gripper_1  (left finger)
-    CHANGED limits: lower was -0.2, upper was 1.57.
-      Corrected to lower="-1.57" upper="0":
-      finger opens toward negative (finger sweeps away from center
-      as joint6 goes negative; fully closed = 0, fully open = -1.57).
+    Positive rotation = finger opens outward.
+    lower="-0.093": almost-closed resting position (slight pre-contact).
+    upper="1.57":   fully open (~90°).
     Origin UNCHANGED.
   -->
   <joint name="joint6" type="revolute">
@@ -332,7 +331,7 @@
     <parent link="gripper_actuator"/>
     <child  link="gripper_1"/>
     <axis xyz="0 0 1"/>
-    <limit lower="-1.57" upper="0" effort="2" velocity="1"/>
+    <limit lower="-0.093" upper="1.57" effort="2" velocity="1"/>
   </joint>
 
   <!-- ═══════ gripper_2 (right finger) ══════════════════════════════ -->
@@ -362,14 +361,11 @@
 
   <!--
     joint7 — gripper_actuator → gripper_2  (right finger)
-    CHANGED limits: lower was -0.2, upper was 1.57.
-      Corrected to lower="-1.57" upper="0" (matches joint6).
-    ADDED mimic: joint7 = +1 × joint6 + 0
-      multiplier=+1 because joint6 frame (rpy="...0") and joint7 frame
-      (rpy="...3.1416") are 180° apart in yaw, making their local Z
-      axes antiparallel in the parent frame.  Equal values → opposite
-      physical rotations → symmetric pinch/open.  multiplier=−1 was
-      wrong: it caused both fingers to sweep the same world direction.
+    Mirrors joint6 via mimic multiplier=+1.
+    Limits match joint6 exactly: lower="-0.093" upper="1.57".
+    Because joint7's frame is rotated 180° in yaw relative to joint6,
+    equal joint values produce opposite physical rotations → symmetric
+    pinch.  joint6=1.57 AND joint7=1.57 → both fingers open outward.
     Origin UNCHANGED.
   -->
   <joint name="joint7" type="revolute">
@@ -377,7 +373,7 @@
     <parent link="gripper_actuator"/>
     <child  link="gripper_2"/>
     <axis xyz="0 0 1"/>
-    <limit lower="-1.57" upper="0" effort="2" velocity="1"/>
+    <limit lower="-0.093" upper="1.57" effort="2" velocity="1"/>
     <mimic joint="joint6" multiplier="1" offset="0"/>
   </joint>
 
