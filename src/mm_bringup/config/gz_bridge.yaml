@@ -1,0 +1,79 @@
+# ros_gz_bridge parameter_bridge configuration
+# Bridges Gazebo Harmonic topics to/from ROS 2
+
+# ── Simulation clock ─────────────────────────────────────────────────
+- ros_topic_name: /clock
+  gz_topic_name:  /clock
+  ros_type_name:  rosgraph_msgs/msg/Clock
+  gz_type_name:   gz.msgs.Clock
+  direction:      GZ_TO_ROS
+
+# ── 2-D LiDAR ────────────────────────────────────────────────────────
+- ros_topic_name: /scan
+  gz_topic_name:  /scan
+  ros_type_name:  sensor_msgs/msg/LaserScan
+  gz_type_name:   gz.msgs.LaserScan
+  direction:      GZ_TO_ROS
+
+# ── IMU ──────────────────────────────────────────────────────────────
+- ros_topic_name: /imu
+  gz_topic_name:  /imu
+  ros_type_name:  sensor_msgs/msg/Imu
+  gz_type_name:   gz.msgs.IMU
+  direction:      GZ_TO_ROS
+
+# ── RGB-D camera ─────────────────────────────────────────────────────
+- ros_topic_name: /camera/image_raw
+  gz_topic_name:  /camera/image
+  ros_type_name:  sensor_msgs/msg/Image
+  gz_type_name:   gz.msgs.Image
+  direction:      GZ_TO_ROS
+
+- ros_topic_name: /camera/depth
+  gz_topic_name:  /camera/depth_image
+  ros_type_name:  sensor_msgs/msg/Image
+  gz_type_name:   gz.msgs.Image
+  direction:      GZ_TO_ROS
+
+- ros_topic_name: /camera/camera_info
+  gz_topic_name:  /camera/camera_info
+  ros_type_name:  sensor_msgs/msg/CameraInfo
+  gz_type_name:   gz.msgs.CameraInfo
+  direction:      GZ_TO_ROS
+
+# ── Grasp attachment (ROS → gz DetachableJoint) ───────────────────────
+- ros_topic_name: /grasp/red_cube
+  gz_topic_name:  /grasp/red_cube
+  ros_type_name:  std_msgs/msg/Bool
+  gz_type_name:   gz.msgs.Boolean
+  direction:      ROS_TO_GZ
+
+- ros_topic_name: /release/red_cube
+  gz_topic_name:  /release/red_cube
+  ros_type_name:  std_msgs/msg/Bool
+  gz_type_name:   gz.msgs.Boolean
+  direction:      ROS_TO_GZ
+
+- ros_topic_name: /grasp/green_cube
+  gz_topic_name:  /grasp/green_cube
+  ros_type_name:  std_msgs/msg/Bool
+  gz_type_name:   gz.msgs.Boolean
+  direction:      ROS_TO_GZ
+
+- ros_topic_name: /release/green_cube
+  gz_topic_name:  /release/green_cube
+  ros_type_name:  std_msgs/msg/Bool
+  gz_type_name:   gz.msgs.Boolean
+  direction:      ROS_TO_GZ
+
+- ros_topic_name: /grasp/blue_cube
+  gz_topic_name:  /grasp/blue_cube
+  ros_type_name:  std_msgs/msg/Bool
+  gz_type_name:   gz.msgs.Boolean
+  direction:      ROS_TO_GZ
+
+- ros_topic_name: /release/blue_cube
+  gz_topic_name:  /release/blue_cube
+  ros_type_name:  std_msgs/msg/Bool
+  gz_type_name:   gz.msgs.Boolean
+  direction:      ROS_TO_GZ

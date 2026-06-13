@@ -10,6 +10,8 @@ find_package(rclcpp REQUIRED)
 find_package(moveit_ros_planning_interface REQUIRED)
 find_package(moveit_core REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
 
@@ -28,7 +30,19 @@ ament_target_dependencies(moveit_smoke_test
   tf2_ros
 )
 
-install(TARGETS moveit_smoke_test
+# ── grasp_server ──────────────────────────────────────────────────────────────
+add_executable(grasp_server src/grasp_server.cpp)
+target_include_directories(grasp_server PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+target_compile_features(grasp_server PUBLIC cxx_std_17)
+ament_target_dependencies(grasp_server
+  rclcpp
+  std_msgs
+  std_srvs
+)
+
+install(TARGETS moveit_smoke_test grasp_server
   DESTINATION lib/${PROJECT_NAME})
 
 install(DIRECTORY launch

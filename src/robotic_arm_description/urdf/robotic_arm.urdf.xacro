@@ -1,6 +1,10 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="robotic_arm">
 
+  <!-- Composability args: set to false when including in a combined robot -->
+  <xacro:arg name="include_world"        default="true"/>
+  <xacro:arg name="include_ros2_control" default="true"/>
+
   <!--
     ╔═══════════════════════════════════════════════════════════════╗
     ║  SolidWorks-export normalization notes                        ║
@@ -37,6 +41,7 @@
     ╚═══════════════════════════════════════════════════════════════╝
   -->
 
+  <xacro:if value="$(arg include_world)">
   <!-- ═══════ world ══════════════════════════════════════════════ -->
   <!-- Massless anchor so RViz/Nav2 have a stable "world" fixed frame. -->
   <link name="world"/>
@@ -63,6 +68,7 @@
     <parent link="world"/>
     <child  link="base_link"/>
   </joint>
+  </xacro:if>
 
   <!-- ═══════ base_link ═══════════════════════════════════════════ -->
   <link name="base_link">
@@ -389,6 +395,7 @@
     <mimic joint="joint6" multiplier="1" offset="0"/>
   </joint>
 
+  <xacro:if value="$(arg include_ros2_control)">
   <!-- ═══════ ros2_control hardware interface ══════════════════════
        mock_components/GenericSystem simulates hardware for the demo.
        Swap the plugin for a real driver (e.g. serial, EtherCAT) in
@@ -455,5 +462,6 @@
       <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
     </joint>
   </ros2_control>
+  </xacro:if>
 
 </robot>

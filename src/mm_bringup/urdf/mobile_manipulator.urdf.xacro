@@ -1,0 +1,140 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="mobile_manipulator">
+
+  <!--
+    Combined mobile manipulator = differential-drive base + 6-DOF arm.
+
+    The arm's world_joint leveling correction (8.1° tilt from PCA plane fit)
+    is preserved in arm_mount_joint with the same xyz/rpy as world_joint:
+      rpy = "0.129355 -0.057284 -0.003711"
+      xyz z = 0.029710 m  (base-plate bottom sits flush on chassis top)
+
+    TF chain in simulation:
+      map → odom → base_footprint → chassis_link → chassis_top_link
+                                                  → arm_mount_joint
+                                                  → base_link (arm root)
+                                                  → lower_arm → … → gripper_*
+                                  → left/right_wheel_link
+                                  → front/rear_caster_link
+                                  → lidar_link, imu_link, camera_*
+  -->
+
+  <!-- Disable world and mock ros2_control from the arm xacro;
+       we provide our own gz ros2_control block here. -->
+  <xacro:arg name="include_world"        default="false"/>
+  <xacro:arg name="include_ros2_control" default="false"/>
+
+  <!-- Mobile base (kinematics + sensors + gz sensor plugins) -->
+  <xacro:include filename="$(find mm_bringup)/urdf/mobile_base.urdf.xacro"/>
+
+  <!-- Arm (kinematics only: no world link, no ros2_control block) -->
+  <xacro:include filename="$(find robotic_arm_description)/urdf/robotic_arm.urdf.xacro"/>
+
+  <!-- Mount arm on chassis top, preserving the SW-export leveling correction -->
+  <joint name="arm_mount_joint" type="fixed">
+    <origin xyz="0 0 0.029710" rpy="0.129355 -0.057284 -0.003711"/>
+    <parent link="chassis_top_link"/>
+    <child  link="base_link"/>
+  </joint>
+
+  <!-- ═══════ gz_ros2_control: single hardware interface for everything ═══ -->
+  <ros2_control name="mobile_manipulator_gz" type="system">
+    <hardware>
+      <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+    </hardware>
+
+    <!-- Drive wheels (diff_drive_controller uses velocity commands) -->
+    <joint name="left_wheel_joint">
+      <command_interface name="velocity"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="right_wheel_joint">
+      <command_interface name="velocity"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+
+    <!-- Passive casters: state only so JSB publishes them -->
+    <joint name="front_caster_joint">
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="rear_caster_joint">
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+
+    <!-- Arm joints (joint_trajectory_controller) -->
+    <joint name="joint0">
+      <command_interface name="position">
+        <param name="min">-3.14</param><param name="max">3.14</param>
+      </command_interface>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+    </joint>
+    <joint name="joint1">
+      <command_interface name="position">
+        <param name="min">-3.14</param><param name="max">3.14</param>
+      </command_interface>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+    </joint>
+    <joint name="joint2">
+      <command_interface name="position">
+        <param name="min">-3.14</param><param name="max">3.14</param>
+      </command_interface>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+    </joint>
+    <joint name="joint3">
+      <command_interface name="position">
+        <param name="min">-3.14</param><param name="max">3.14</param>
+      </command_interface>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+    </joint>
+    <joint name="joint4">
+      <command_interface name="position">
+        <param name="min">-3.14</param><param name="max">3.14</param>
+      </command_interface>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+    </joint>
+    <joint name="joint5">
+      <command_interface name="position">
+        <param name="min">-3.14</param><param name="max">3.14</param>
+      </command_interface>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+    </joint>
+
+    <!-- Gripper drive finger (position controller) -->
+    <joint name="joint6">
+      <command_interface name="position">
+        <param name="min">-0.093</param><param name="max">1.57</param>
+      </command_interface>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+    </joint>
+
+    <!-- joint7: mimic of joint6 — state only, physics enforces the constraint -->
+    <joint name="joint7">
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+    </joint>
+  </ros2_control>
+
+  <!-- Gazebo system plugin that activates gz_ros2_control -->
+  <gazebo>
+    <plugin filename="gz_ros2_control-system"
+            name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+      <parameters>$(find mm_bringup)/config/ros2_controllers_gz.yaml</parameters>
+    </plugin>
+  </gazebo>
+
+  <!-- DetachableJoint plugins for grasping are defined in warehouse.sdf
+       so they have world-level scope and can reference the spawned robot
+       model by name. -->
+
+</robot>

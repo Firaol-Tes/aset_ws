@@ -1,0 +1,370 @@
+<?xml version="1.0"?>
+<sdf version="1.9">
+<world name="warehouse">
+
+  <!-- ═══════ physics & rendering ════════════════════════════════════ -->
+  <physics type="ode">
+    <max_step_size>0.001</max_step_size>
+    <real_time_factor>1.0</real_time_factor>
+    <real_time_update_rate>1000</real_time_update_rate>
+  </physics>
+
+  <plugin filename="gz-sim-physics-system"     name="gz::sim::systems::Physics"/>
+  <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"/>
+  <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
+  <plugin filename="gz-sim-contact-system"     name="gz::sim::systems::Contact"/>
+
+  <!-- ═══════ lighting ═════════════════════════════════════════════════ -->
+  <light name="sunlight" type="directional">
+    <pose>0 0 10 0 0 0</pose>
+    <diffuse>0.9 0.9 0.9 1</diffuse>
+    <specular>0.3 0.3 0.3 1</specular>
+    <direction>-0.5 0.2 -0.9</direction>
+    <cast_shadows>true</cast_shadows>
+  </light>
+
+  <light name="fill_light" type="directional">
+    <pose>0 0 5 0 0 0</pose>
+    <diffuse>0.4 0.4 0.5 1</diffuse>
+    <specular>0.1 0.1 0.1 1</specular>
+    <direction>0.5 -0.2 -0.7</direction>
+    <cast_shadows>false</cast_shadows>
+  </light>
+
+  <!-- ═══════ ground plane ═══════════════════════════════════════════ -->
+  <model name="ground_plane">
+    <static>true</static>
+    <link name="link">
+      <collision name="col">
+        <geometry><plane><normal>0 0 1</normal><size>30 30</size></plane></geometry>
+        <surface>
+          <friction><ode><mu>0.8</mu><mu2>0.8</mu2></ode></friction>
+        </surface>
+      </collision>
+      <visual name="vis">
+        <geometry><plane><normal>0 0 1</normal><size>30 30</size></plane></geometry>
+        <material>
+          <ambient>0.4 0.4 0.4 1</ambient>
+          <diffuse>0.5 0.5 0.5 1</diffuse>
+        </material>
+      </visual>
+    </link>
+  </model>
+
+  <!-- ═══════ dispatch zone (coloured floor patch, static) ═══════════ -->
+  <model name="dispatch_zone">
+    <static>true</static>
+    <pose>-2.0 0 0.005 0 0 0</pose>
+    <link name="link">
+      <visual name="vis">
+        <geometry><box><size>0.8 0.8 0.01</size></box></geometry>
+        <material>
+          <ambient>0.8 0.6 0.0 1</ambient>
+          <diffuse>0.9 0.7 0.0 1</diffuse>
+        </material>
+      </visual>
+    </link>
+  </model>
+
+  <!-- ═══════ shelf unit A (along +x wall) ══════════════════════════ -->
+  <!-- Shelf posts -->
+  <model name="shelf_A">
+    <static>true</static>
+    <pose>4.0 -1.0 0 0 0 0</pose>
+    <link name="link">
+      <!-- back panel -->
+      <collision name="back">
+        <pose>0 0.02 0.75 0 0 0</pose>
+        <geometry><box><size>0.80 0.04 1.50</size></box></geometry>
+      </collision>
+      <visual name="back">
+        <pose>0 0.02 0.75 0 0 0</pose>
+        <geometry><box><size>0.80 0.04 1.50</size></box></geometry>
+        <material><ambient>0.5 0.4 0.3 1</ambient><diffuse>0.6 0.5 0.4 1</diffuse></material>
+      </visual>
+      <!-- shelf level 1 -->
+      <collision name="shelf1">
+        <pose>0 -0.15 0.40 0 0 0</pose>
+        <geometry><box><size>0.80 0.40 0.03</size></box></geometry>
+      </collision>
+      <visual name="shelf1">
+        <pose>0 -0.15 0.40 0 0 0</pose>
+        <geometry><box><size>0.80 0.40 0.03</size></box></geometry>
+        <material><ambient>0.5 0.4 0.3 1</ambient><diffuse>0.6 0.5 0.4 1</diffuse></material>
+      </visual>
+      <!-- shelf level 2 -->
+      <collision name="shelf2">
+        <pose>0 -0.15 0.80 0 0 0</pose>
+        <geometry><box><size>0.80 0.40 0.03</size></box></geometry>
+      </collision>
+      <visual name="shelf2">
+        <pose>0 -0.15 0.80 0 0 0</pose>
+        <geometry><box><size>0.80 0.40 0.03</size></box></geometry>
+        <material><ambient>0.5 0.4 0.3 1</ambient><diffuse>0.6 0.5 0.4 1</diffuse></material>
+      </visual>
+      <!-- shelf level 3 -->
+      <collision name="shelf3">
+        <pose>0 -0.15 1.20 0 0 0</pose>
+        <geometry><box><size>0.80 0.40 0.03</size></box></geometry>
+      </collision>
+      <visual name="shelf3">
+        <pose>0 -0.15 1.20 0 0 0</pose>
+        <geometry><box><size>0.80 0.40 0.03</size></box></geometry>
+        <material><ambient>0.5 0.4 0.3 1</ambient><diffuse>0.6 0.5 0.4 1</diffuse></material>
+      </visual>
+      <inertial><mass>0.001</mass><inertia><ixx>1</ixx><iyy>1</iyy><izz>1</izz></inertia></inertial>
+    </link>
+  </model>
+
+  <model name="shelf_B">
+    <static>true</static>
+    <pose>4.0 0.0 0 0 0 0</pose>
+    <link name="link">
+      <collision name="back">
+        <pose>0 0.02 0.75 0 0 0</pose>
+        <geometry><box><size>0.80 0.04 1.50</size></box></geometry>
+      </collision>
+      <visual name="back">
+        <pose>0 0.02 0.75 0 0 0</pose>
+        <geometry><box><size>0.80 0.04 1.50</size></box></geometry>
+        <material><ambient>0.5 0.4 0.3 1</ambient><diffuse>0.6 0.5 0.4 1</diffuse></material>
+      </visual>
+      <collision name="shelf1">
+        <pose>0 -0.15 0.40 0 0 0</pose>
+        <geometry><box><size>0.80 0.40 0.03</size></box></geometry>
+      </collision>
+      <visual name="shelf1">
+        <pose>0 -0.15 0.40 0 0 0</pose>
+        <geometry><box><size>0.80 0.40 0.03</size></box></geometry>
+        <material><ambient>0.5 0.4 0.3 1</ambient><diffuse>0.6 0.5 0.4 1</diffuse></material>
+      </visual>
+      <collision name="shelf2">
+        <pose>0 -0.15 0.80 0 0 0</pose>
+        <geometry><box><size>0.80 0.40 0.03</size></box></geometry>
+      </collision>
+      <visual name="shelf2">
+        <pose>0 -0.15 0.80 0 0 0</pose>
+        <geometry><box><size>0.80 0.40 0.03</size></box></geometry>
+        <material><ambient>0.5 0.4 0.3 1</ambient><diffuse>0.6 0.5 0.4 1</diffuse></material>
+      </visual>
+      <collision name="shelf3">
+        <pose>0 -0.15 1.20 0 0 0</pose>
+        <geometry><box><size>0.80 0.40 0.03</size></box></geometry>
+      </collision>
+      <visual name="shelf3">
+        <pose>0 -0.15 1.20 0 0 0</pose>
+        <geometry><box><size>0.80 0.40 0.03</size></box></geometry>
+        <material><ambient>0.5 0.4 0.3 1</ambient><diffuse>0.6 0.5 0.4 1</diffuse></material>
+      </visual>
+      <inertial><mass>0.001</mass><inertia><ixx>1</ixx><iyy>1</iyy><izz>1</izz></inertia></inertial>
+    </link>
+  </model>
+
+  <model name="shelf_C">
+    <static>true</static>
+    <pose>4.0 1.0 0 0 0 0</pose>
+    <link name="link">
+      <collision name="back">
+        <pose>0 0.02 0.75 0 0 0</pose>
+        <geometry><box><size>0.80 0.04 1.50</size></box></geometry>
+      </collision>
+      <visual name="back">
+        <pose>0 0.02 0.75 0 0 0</pose>
+        <geometry><box><size>0.80 0.04 1.50</size></box></geometry>
+        <material><ambient>0.5 0.4 0.3 1</ambient><diffuse>0.6 0.5 0.4 1</diffuse></material>
+      </visual>
+      <collision name="shelf1">
+        <pose>0 -0.15 0.40 0 0 0</pose>
+        <geometry><box><size>0.80 0.40 0.03</size></box></geometry>
+      </collision>
+      <visual name="shelf1">
+        <pose>0 -0.15 0.40 0 0 0</pose>
+        <geometry><box><size>0.80 0.40 0.03</size></box></geometry>
+        <material><ambient>0.5 0.4 0.3 1</ambient><diffuse>0.6 0.5 0.4 1</diffuse></material>
+      </visual>
+      <collision name="shelf2">
+        <pose>0 -0.15 0.80 0 0 0</pose>
+        <geometry><box><size>0.80 0.40 0.03</size></box></geometry>
+      </collision>
+      <visual name="shelf2">
+        <pose>0 -0.15 0.80 0 0 0</pose>
+        <geometry><box><size>0.80 0.40 0.03</size></box></geometry>
+        <material><ambient>0.5 0.4 0.3 1</ambient><diffuse>0.6 0.5 0.4 1</diffuse></material>
+      </visual>
+      <collision name="shelf3">
+        <pose>0 -0.15 1.20 0 0 0</pose>
+        <geometry><box><size>0.80 0.40 0.03</size></box></geometry>
+      </collision>
+      <visual name="shelf3">
+        <pose>0 -0.15 1.20 0 0 0</pose>
+        <geometry><box><size>0.80 0.40 0.03</size></box></geometry>
+        <material><ambient>0.5 0.4 0.3 1</ambient><diffuse>0.6 0.5 0.4 1</diffuse></material>
+      </visual>
+      <inertial><mass>0.001</mass><inertia><ixx>1</ixx><iyy>1</iyy><izz>1</izz></inertia></inertial>
+    </link>
+  </model>
+
+  <!-- ═══════ pick table (static, top surface at z=0.80 m) ══════════ -->
+  <model name="pick_table">
+    <static>true</static>
+    <pose>2.5 0 0 0 0 0</pose>
+    <link name="link">
+      <!-- tabletop -->
+      <collision name="top">
+        <pose>0 0 0.79 0 0 0</pose>
+        <geometry><box><size>0.80 0.60 0.04</size></box></geometry>
+      </collision>
+      <visual name="top">
+        <pose>0 0 0.79 0 0 0</pose>
+        <geometry><box><size>0.80 0.60 0.04</size></box></geometry>
+        <material><ambient>0.6 0.4 0.2 1</ambient><diffuse>0.7 0.5 0.3 1</diffuse></material>
+      </visual>
+      <!-- legs -->
+      <collision name="leg_fl">
+        <pose> 0.36  0.26 0.39 0 0 0</pose>
+        <geometry><box><size>0.05 0.05 0.78</size></box></geometry>
+      </collision>
+      <visual name="leg_fl">
+        <pose> 0.36  0.26 0.39 0 0 0</pose>
+        <geometry><box><size>0.05 0.05 0.78</size></box></geometry>
+        <material><ambient>0.4 0.3 0.2 1</ambient><diffuse>0.5 0.4 0.3 1</diffuse></material>
+      </visual>
+      <collision name="leg_fr">
+        <pose> 0.36 -0.26 0.39 0 0 0</pose>
+        <geometry><box><size>0.05 0.05 0.78</size></box></geometry>
+      </collision>
+      <visual name="leg_fr">
+        <pose> 0.36 -0.26 0.39 0 0 0</pose>
+        <geometry><box><size>0.05 0.05 0.78</size></box></geometry>
+        <material><ambient>0.4 0.3 0.2 1</ambient><diffuse>0.5 0.4 0.3 1</diffuse></material>
+      </visual>
+      <collision name="leg_bl">
+        <pose>-0.36  0.26 0.39 0 0 0</pose>
+        <geometry><box><size>0.05 0.05 0.78</size></box></geometry>
+      </collision>
+      <visual name="leg_bl">
+        <pose>-0.36  0.26 0.39 0 0 0</pose>
+        <geometry><box><size>0.05 0.05 0.78</size></box></geometry>
+        <material><ambient>0.4 0.3 0.2 1</ambient><diffuse>0.5 0.4 0.3 1</diffuse></material>
+      </visual>
+      <collision name="leg_br">
+        <pose>-0.36 -0.26 0.39 0 0 0</pose>
+        <geometry><box><size>0.05 0.05 0.78</size></box></geometry>
+      </collision>
+      <visual name="leg_br">
+        <pose>-0.36 -0.26 0.39 0 0 0</pose>
+        <geometry><box><size>0.05 0.05 0.78</size></box></geometry>
+        <material><ambient>0.4 0.3 0.2 1</ambient><diffuse>0.5 0.4 0.3 1</diffuse></material>
+      </visual>
+      <inertial><mass>0.001</mass><inertia><ixx>1</ixx><iyy>1</iyy><izz>1</izz></inertia></inertial>
+    </link>
+  </model>
+
+  <!-- ═══════ coloured 5 cm cubes on the table (z = 0.81 + 0.025 = 0.835) -->
+
+  <model name="red_cube">
+    <pose>2.5 0.08 0.835 0 0 0</pose>
+    <link name="link">
+      <collision name="col">
+        <geometry><box><size>0.05 0.05 0.05</size></box></geometry>
+        <surface>
+          <friction><ode><mu>0.6</mu><mu2>0.6</mu2></ode></friction>
+        </surface>
+      </collision>
+      <visual name="vis">
+        <geometry><box><size>0.05 0.05 0.05</size></box></geometry>
+        <material><ambient>0.8 0.1 0.1 1</ambient><diffuse>0.9 0.1 0.1 1</diffuse></material>
+      </visual>
+      <inertial>
+        <mass>0.05</mass>
+        <!-- solid box 5 cm: I = m(a²+b²)/12 = 0.05*(0.0025+0.0025)/12 = 2.083e-5 -->
+        <inertia>
+          <ixx>2.083e-5</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>2.083e-5</iyy><iyz>0</iyz>
+          <izz>2.083e-5</izz>
+        </inertia>
+      </inertial>
+    </link>
+  </model>
+
+  <model name="green_cube">
+    <pose>2.5 0.00 0.835 0 0 0</pose>
+    <link name="link">
+      <collision name="col">
+        <geometry><box><size>0.05 0.05 0.05</size></box></geometry>
+        <surface>
+          <friction><ode><mu>0.6</mu><mu2>0.6</mu2></ode></friction>
+        </surface>
+      </collision>
+      <visual name="vis">
+        <geometry><box><size>0.05 0.05 0.05</size></box></geometry>
+        <material><ambient>0.1 0.7 0.1 1</ambient><diffuse>0.1 0.8 0.1 1</diffuse></material>
+      </visual>
+      <inertial>
+        <mass>0.05</mass>
+        <inertia>
+          <ixx>2.083e-5</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>2.083e-5</iyy><iyz>0</iyz>
+          <izz>2.083e-5</izz>
+        </inertia>
+      </inertial>
+    </link>
+  </model>
+
+  <model name="blue_cube">
+    <pose>2.5 -0.08 0.835 0 0 0</pose>
+    <link name="link">
+      <collision name="col">
+        <geometry><box><size>0.05 0.05 0.05</size></box></geometry>
+        <surface>
+          <friction><ode><mu>0.6</mu><mu2>0.6</mu2></ode></friction>
+        </surface>
+      </collision>
+      <visual name="vis">
+        <geometry><box><size>0.05 0.05 0.05</size></box></geometry>
+        <material><ambient>0.1 0.1 0.8 1</ambient><diffuse>0.1 0.1 0.9 1</diffuse></material>
+      </visual>
+      <inertial>
+        <mass>0.05</mass>
+        <inertia>
+          <ixx>2.083e-5</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>2.083e-5</iyy><iyz>0</iyz>
+          <izz>2.083e-5</izz>
+        </inertia>
+      </inertial>
+    </link>
+  </model>
+
+  <!-- ═══════ DetachableJoint plugins for grasping ═══════════════════
+       gz.msgs.Boolean true  → attach,  false → detach.
+       Parent link name uses the spawned robot model name "mobile_manipulator".
+  -->
+  <plugin filename="gz-sim-detachable-joint-system"
+          name="gz::sim::systems::DetachableJoint">
+    <parent_link>mobile_manipulator::gripper_actuator</parent_link>
+    <child_model>red_cube</child_model>
+    <child_link>link</child_link>
+    <topic>/grasp/red_cube</topic>
+    <detach_topic>/release/red_cube</detach_topic>
+  </plugin>
+
+  <plugin filename="gz-sim-detachable-joint-system"
+          name="gz::sim::systems::DetachableJoint">
+    <parent_link>mobile_manipulator::gripper_actuator</parent_link>
+    <child_model>green_cube</child_model>
+    <child_link>link</child_link>
+    <topic>/grasp/green_cube</topic>
+    <detach_topic>/release/green_cube</detach_topic>
+  </plugin>
+
+  <plugin filename="gz-sim-detachable-joint-system"
+          name="gz::sim::systems::DetachableJoint">
+    <parent_link>mobile_manipulator::gripper_actuator</parent_link>
+    <child_model>blue_cube</child_model>
+    <child_link>link</child_link>
+    <topic>/grasp/blue_cube</topic>
+    <detach_topic>/release/blue_cube</detach_topic>
+  </plugin>
+
+</world>
+</sdf>

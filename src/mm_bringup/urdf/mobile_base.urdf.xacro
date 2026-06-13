@@ -1,0 +1,329 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!--
+    Mobile differential-drive base for the mobile manipulator.
+
+    Geometry (all from base_footprint which is on the ground):
+      chassis_link  center  z = 0.20 m
+      drive wheels  center  z = 0.10 m  (wheel_radius, bottom at z=0)
+      caster balls  center  z = 0.05 m  (caster_radius, bottom at z=0)
+      chassis top         z = 0.30 m    → arm mounts here
+
+    The arm is heavy (~8 kg); chassis mass 20 kg keeps CoM low.
+  -->
+
+  <!-- ─── chassis ─────────────────────────────────────────────────── -->
+  <link name="base_footprint"/>
+
+  <joint name="base_footprint_joint" type="fixed">
+    <origin xyz="0 0 0.20" rpy="0 0 0"/>
+    <parent link="base_footprint"/>
+    <child  link="chassis_link"/>
+  </joint>
+
+  <link name="chassis_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><box size="0.50 0.40 0.20"/></geometry>
+      <material name="dark_grey">
+        <color rgba="0.2 0.2 0.2 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><box size="0.50 0.40 0.20"/></geometry>
+    </collision>
+    <inertial>
+      <!-- 20 kg box: Ixx = m(y²+z²)/12, etc. -->
+      <mass value="20.0"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <inertia ixx="0.270" ixy="0" ixz="0"
+               iyy="0.438" iyz="0"
+               izz="0.583"/>
+    </inertial>
+  </link>
+
+  <!-- ─── virtual chassis-top link (arm mounting point) ──────────── -->
+  <joint name="chassis_top_joint" type="fixed">
+    <origin xyz="0 0 0.10" rpy="0 0 0"/>
+    <parent link="chassis_link"/>
+    <child  link="chassis_top_link"/>
+  </joint>
+  <link name="chassis_top_link"/>
+
+  <!-- ─── drive wheels ────────────────────────────────────────────── -->
+  <!-- wheel_radius=0.10  width=0.05  mass=0.5 kg  axis along Y -->
+
+  <joint name="left_wheel_joint" type="continuous">
+    <origin xyz="0 0.225 -0.10" rpy="-1.5707963 0 0"/>
+    <parent link="chassis_link"/>
+    <child  link="left_wheel_link"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+  <link name="left_wheel_link">
+    <visual>
+      <geometry><cylinder radius="0.10" length="0.05"/></geometry>
+      <material name="black"><color rgba="0.1 0.1 0.1 1.0"/></material>
+    </visual>
+    <collision>
+      <geometry><cylinder radius="0.10" length="0.05"/></geometry>
+    </collision>
+    <inertial>
+      <mass value="0.5"/>
+      <origin xyz="0 0 0"/>
+      <!-- solid cylinder: Ixx=Iyy=m(3r²+h²)/12  Izz=mr²/2 -->
+      <inertia ixx="4.58e-4" ixy="0" ixz="0"
+               iyy="4.58e-4" iyz="0"
+               izz="2.50e-3"/>
+    </inertial>
+  </link>
+
+  <joint name="right_wheel_joint" type="continuous">
+    <origin xyz="0 -0.225 -0.10" rpy="-1.5707963 0 0"/>
+    <parent link="chassis_link"/>
+    <child  link="right_wheel_link"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+  <link name="right_wheel_link">
+    <visual>
+      <geometry><cylinder radius="0.10" length="0.05"/></geometry>
+      <material name="black"/>
+    </visual>
+    <collision>
+      <geometry><cylinder radius="0.10" length="0.05"/></geometry>
+    </collision>
+    <inertial>
+      <mass value="0.5"/>
+      <origin xyz="0 0 0"/>
+      <inertia ixx="4.58e-4" ixy="0" ixz="0"
+               iyy="4.58e-4" iyz="0"
+               izz="2.50e-3"/>
+    </inertial>
+  </link>
+
+  <!-- ─── passive casters (ball, zero friction) ────────────────────── -->
+  <!-- caster_radius=0.05  center at z = 0.05-0.20 = -0.15 from chassis -->
+
+  <joint name="front_caster_joint" type="continuous">
+    <origin xyz="0.20 0 -0.15" rpy="0 0 0"/>
+    <parent link="chassis_link"/>
+    <child  link="front_caster_link"/>
+    <axis xyz="1 0 0"/>
+  </joint>
+  <link name="front_caster_link">
+    <visual>
+      <geometry><sphere radius="0.05"/></geometry>
+      <material name="light_grey"><color rgba="0.7 0.7 0.7 1.0"/></material>
+    </visual>
+    <collision>
+      <geometry><sphere radius="0.05"/></geometry>
+    </collision>
+    <inertial>
+      <mass value="0.1"/>
+      <origin xyz="0 0 0"/>
+      <!-- solid sphere: I = 2mr²/5 -->
+      <inertia ixx="1.0e-4" ixy="0" ixz="0"
+               iyy="1.0e-4" iyz="0"
+               izz="1.0e-4"/>
+    </inertial>
+  </link>
+
+  <joint name="rear_caster_joint" type="continuous">
+    <origin xyz="-0.20 0 -0.15" rpy="0 0 0"/>
+    <parent link="chassis_link"/>
+    <child  link="rear_caster_link"/>
+    <axis xyz="1 0 0"/>
+  </joint>
+  <link name="rear_caster_link">
+    <visual>
+      <geometry><sphere radius="0.05"/></geometry>
+      <material name="light_grey"/>
+    </visual>
+    <collision>
+      <geometry><sphere radius="0.05"/></geometry>
+    </collision>
+    <inertial>
+      <mass value="0.1"/>
+      <origin xyz="0 0 0"/>
+      <inertia ixx="1.0e-4" ixy="0" ixz="0"
+               iyy="1.0e-4" iyz="0"
+               izz="1.0e-4"/>
+    </inertial>
+  </link>
+
+  <!-- ─── LiDAR ─────────────────────────────────────────────────────── -->
+  <joint name="lidar_joint" type="fixed">
+    <origin xyz="0.12 0 0.12" rpy="0 0 0"/>
+    <parent link="chassis_link"/>
+    <child  link="lidar_link"/>
+  </joint>
+  <link name="lidar_link">
+    <visual>
+      <geometry><cylinder radius="0.04" length="0.04"/></geometry>
+      <material name="blue"><color rgba="0.0 0.2 0.8 1.0"/></material>
+    </visual>
+    <inertial>
+      <mass value="0.1"/>
+      <origin xyz="0 0 0"/>
+      <inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/>
+    </inertial>
+  </link>
+
+  <!-- ─── IMU ───────────────────────────────────────────────────────── -->
+  <joint name="imu_joint" type="fixed">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <parent link="chassis_link"/>
+    <child  link="imu_link"/>
+  </joint>
+  <link name="imu_link">
+    <inertial>
+      <mass value="0.01"/>
+      <origin xyz="0 0 0"/>
+      <inertia ixx="1e-6" ixy="0" ixz="0" iyy="1e-6" iyz="0" izz="1e-6"/>
+    </inertial>
+  </link>
+
+  <!-- ─── RGB-D camera on a forward mast ──────────────────────────── -->
+  <joint name="camera_mast_joint" type="fixed">
+    <origin xyz="0.20 0 0.12" rpy="0 0 0"/>
+    <parent link="chassis_link"/>
+    <child  link="camera_mast_link"/>
+  </joint>
+  <link name="camera_mast_link">
+    <visual>
+      <geometry><box size="0.03 0.03 0.25"/></geometry>
+      <material name="dark_grey"/>
+    </visual>
+    <inertial>
+      <mass value="0.1"/>
+      <origin xyz="0 0 0"/>
+      <inertia ixx="5e-4" ixy="0" ixz="0" iyy="5e-4" iyz="0" izz="1e-5"/>
+    </inertial>
+  </link>
+
+  <!-- camera_link: tip of mast, tilted 20° down to see workspace -->
+  <joint name="camera_joint" type="fixed">
+    <origin xyz="0.02 0 0.125" rpy="0 0.349 0"/>
+    <parent link="camera_mast_link"/>
+    <child  link="camera_link"/>
+  </joint>
+  <link name="camera_link">
+    <visual>
+      <geometry><box size="0.06 0.12 0.04"/></geometry>
+      <material name="blue"/>
+    </visual>
+    <inertial>
+      <mass value="0.1"/>
+      <origin xyz="0 0 0"/>
+      <inertia ixx="1e-4" ixy="0" ixz="0" iyy="1e-4" iyz="0" izz="1e-4"/>
+    </inertial>
+  </link>
+
+  <!-- camera_optical_link: REP-103 optical frame (z=forward, x=right, y=down) -->
+  <joint name="camera_optical_joint" type="fixed">
+    <origin xyz="0 0 0" rpy="-1.5707963 0 -1.5707963"/>
+    <parent link="camera_link"/>
+    <child  link="camera_optical_link"/>
+  </joint>
+  <link name="camera_optical_link"/>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       Gazebo Harmonic plugins
+  ═══════════════════════════════════════════════════════════════════ -->
+
+  <!-- Caster wheels: zero friction so they slide freely -->
+  <gazebo reference="front_caster_link">
+    <mu1>0.0</mu1>
+    <mu2>0.0</mu2>
+  </gazebo>
+  <gazebo reference="rear_caster_link">
+    <mu1>0.0</mu1>
+    <mu2>0.0</mu2>
+  </gazebo>
+
+  <!-- Drive wheel friction (good traction) -->
+  <gazebo reference="left_wheel_link">
+    <mu1>1.0</mu1>
+    <mu2>1.0</mu2>
+  </gazebo>
+  <gazebo reference="right_wheel_link">
+    <mu1>1.0</mu1>
+    <mu2>1.0</mu2>
+  </gazebo>
+
+  <!-- Sensor system plugins (must be in <gazebo> world-level block) -->
+  <gazebo>
+    <plugin filename="gz-sim-sensors-system"
+            name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+    <plugin filename="gz-sim-imu-system"
+            name="gz::sim::systems::Imu"/>
+  </gazebo>
+
+  <!-- 360° 2-D LiDAR → /scan -->
+  <gazebo reference="lidar_link">
+    <sensor name="lidar_sensor" type="gpu_lidar">
+      <gz_frame_id>lidar_link</gz_frame_id>
+      <topic>/scan</topic>
+      <update_rate>10</update_rate>
+      <lidar>
+        <scan>
+          <horizontal>
+            <samples>360</samples>
+            <resolution>1</resolution>
+            <min_angle>-3.14159265</min_angle>
+            <max_angle>3.14159265</max_angle>
+          </horizontal>
+        </scan>
+        <range>
+          <min>0.15</min>
+          <max>10.0</max>
+          <resolution>0.01</resolution>
+        </range>
+        <noise>
+          <type>gaussian</type>
+          <mean>0.0</mean>
+          <stddev>0.01</stddev>
+        </noise>
+      </lidar>
+      <always_on>true</always_on>
+      <visualize>false</visualize>
+    </sensor>
+  </gazebo>
+
+  <!-- IMU → /imu -->
+  <gazebo reference="imu_link">
+    <sensor name="imu_sensor" type="imu">
+      <gz_frame_id>imu_link</gz_frame_id>
+      <topic>/imu</topic>
+      <update_rate>100</update_rate>
+      <always_on>true</always_on>
+    </sensor>
+  </gazebo>
+
+  <!-- RGB-D camera → /camera/* -->
+  <gazebo reference="camera_link">
+    <sensor name="rgbd_camera" type="rgbd_camera">
+      <gz_frame_id>camera_optical_link</gz_frame_id>
+      <topic>/camera</topic>
+      <update_rate>15</update_rate>
+      <camera>
+        <horizontal_fov>1.047</horizontal_fov>
+        <image>
+          <width>640</width>
+          <height>480</height>
+          <format>RGB_INT8</format>
+        </image>
+        <clip>
+          <near>0.1</near>
+          <far>10.0</far>
+        </clip>
+      </camera>
+      <always_on>true</always_on>
+      <visualize>false</visualize>
+    </sensor>
+  </gazebo>
+
+</robot>
