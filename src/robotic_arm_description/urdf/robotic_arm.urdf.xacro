@@ -13,8 +13,9 @@
     ║                                                               ║
     ║  CHANGES MADE:                                                ║
     ║  1. world_joint added (world → base_link, fixed):             ║
-    ║     z=+0.039247 m lifts base plate bottom to world z=0.       ║
-    ║     rpy=0 0 0 — plate is flat in base_link, no rotation.      ║
+    ║     rpy=0.1294 -0.0573 -0.0037 — derived from PCA plane fit   ║
+    ║     on bottom-face triangles (8.1° tilt in SW export).        ║
+    ║     z=+0.029710 m lifts base plate bottom to world z=0.       ║
     ║  2. joint0 xyz zeroed → arm base sits at world origin.        ║
     ║  3. joint0 rpy kept unchanged: it encodes the actual physical ║
     ║     mounting orientation of lower_arm on the base plate.      ║
@@ -42,19 +43,23 @@
 
   <!--
     world_joint — world → base_link  (fixed)
-    xyz z = +0.039247 m: lifts the robot so the base plate bottom face
-      sits exactly on the world XY ground plane (z = 0).
-      Derived from: base_link.STL Z_min = 0.868253 m (SW coords),
-      visual offset Z = −0.9075 m  →  bottom in base_link = −0.039247 m
-      →  z_lift = 0.039247 m so that −0.039247 + 0.039247 = 0.
-    rpy = 0 0 0: the base plate's bottom face is already horizontal in
-      base_link coords (Z span = 5.1 cm, XY span ≈ 14 cm square), so
-      no rotation is needed to level it on the ground plane.
-      (The previous pitch correction was tilting the plate in world
-      frame, which is wrong for a flat ground spawn.)
+    Values derived by fitting a plane to the 17 bottom-face triangles of
+    base_link.STL and computing the rotation that maps the plane normal
+    onto world Z.
+
+    Bottom-face plane normal in base_link = [0.0573, 0.1288, 0.9900]
+      → 8.1° off vertical in base_link coords (plate is genuinely tilted
+        in the SW export, not just a translation issue).
+
+    rpy = "0.129355 -0.057284 -0.003711"  (roll 7.4°, pitch −3.3°, yaw −0.2°)
+      Rotates base_link so the bottom face is horizontal in world frame.
+
+    xyz z = 0.029710 m
+      After applying the rpy, the lowest mesh vertex sits at world Z =
+      −0.029710 m; lifting by that amount places the bottom at z = 0.
   -->
   <joint name="world_joint" type="fixed">
-    <origin xyz="0 0 0.039247" rpy="0 0 0"/>
+    <origin xyz="0 0 0.029710" rpy="0.129355 -0.057284 -0.003711"/>
     <parent link="world"/>
     <child  link="base_link"/>
   </joint>
