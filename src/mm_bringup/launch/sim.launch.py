@@ -3,6 +3,7 @@ sim.launch.py — Start the full mobile manipulator simulation in Gazebo Harmoni
 
 Starts:
   • Gazebo Harmonic (gz sim -r warehouse.sdf)
+      world contains: floor, shelves, table, dispatch zone, 3 coloured cubes
   • robot_state_publisher  (combined URDF)
   • ros_gz_sim/create      (spawns robot into Gazebo)
   • ros_gz_bridge          (clock, /scan, /imu, /camera/*, grasp topics)

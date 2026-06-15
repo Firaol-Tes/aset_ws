@@ -20,7 +20,7 @@ diff_drive_controller:
     left_wheel_names:  ['left_wheel_joint']
     right_wheel_names: ['right_wheel_joint']
 
-    wheel_separation: 0.45   # distance between wheel centres (m)
+    wheel_separation: 0.38   # distance between wheel centres (m) — matches mobile_base.urdf.xacro
     wheel_radius:     0.10   # wheel radius (m)
 
     publish_rate: 50.0
