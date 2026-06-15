@@ -11,13 +11,20 @@
   <buildtool_depend>ament_cmake</buildtool_depend>
 
   <depend>rclcpp</depend>
+  <depend>rclcpp_action</depend>
   <depend>moveit_ros_planning_interface</depend>
   <depend>moveit_core</depend>
   <depend>geometry_msgs</depend>
   <depend>std_msgs</depend>
   <depend>std_srvs</depend>
+  <depend>nav_msgs</depend>
+  <depend>nav2_msgs</depend>
+  <depend>sensor_msgs</depend>
   <depend>tf2_geometry_msgs</depend>
   <depend>tf2_ros</depend>
+  <depend>tf2</depend>
+  <depend>mm_interfaces</depend>
+  <depend>yaml-cpp</depend>
 
   <exec_depend>arm_moveit_config</exec_depend>
   <exec_depend>robotic_arm_description</exec_depend>

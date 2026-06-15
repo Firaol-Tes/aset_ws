@@ -270,10 +270,9 @@
   </model>
 
   <!-- ═══════ coloured 4 cm cubes on the table ════════════════════════
-       Plain dynamic models — no DetachableJoint here.
-       Grasp attachment (Phase 6) will use DetachableJoint in the ROBOT
-       model (correct gz-sim 8 pattern: plugin in parent model, child_model
-       references the cube). -->
+       DetachableJoint in each cube model: on /grasp/<color>_cube (Bool True)
+       the cube is rigidly attached to the robot's gripper_actuator link.
+       /release/<color>_cube (Bool True) detaches it. -->
 
   <model name="red_cube">
     <pose>2.5 0.05 0.40 0 0 0</pose>
@@ -296,6 +295,13 @@
         </inertia>
       </inertial>
     </link>
+    <plugin filename="gz-sim-detachable-joint-system"
+            name="gz::sim::systems::DetachableJoint">
+      <parent_link>mobile_manipulator::gripper_actuator</parent_link>
+      <child_link>link</child_link>
+      <topic>/grasp/red_cube</topic>
+      <detach_topic>/release/red_cube</detach_topic>
+    </plugin>
   </model>
 
   <model name="green_cube">
@@ -318,6 +324,13 @@
         </inertia>
       </inertial>
     </link>
+    <plugin filename="gz-sim-detachable-joint-system"
+            name="gz::sim::systems::DetachableJoint">
+      <parent_link>mobile_manipulator::gripper_actuator</parent_link>
+      <child_link>link</child_link>
+      <topic>/grasp/green_cube</topic>
+      <detach_topic>/release/green_cube</detach_topic>
+    </plugin>
   </model>
 
   <model name="blue_cube">
@@ -340,6 +353,13 @@
         </inertia>
       </inertial>
     </link>
+    <plugin filename="gz-sim-detachable-joint-system"
+            name="gz::sim::systems::DetachableJoint">
+      <parent_link>mobile_manipulator::gripper_actuator</parent_link>
+      <child_link>link</child_link>
+      <topic>/grasp/blue_cube</topic>
+      <detach_topic>/release/blue_cube</detach_topic>
+    </plugin>
   </model>
 
   <!-- ═══════ perimeter walls (give LiDAR closed boundaries for SLAM) ═══ -->

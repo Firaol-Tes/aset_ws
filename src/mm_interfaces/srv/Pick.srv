@@ -1,0 +1,4 @@
+string object_label
+---
+bool success
+string message
