@@ -198,19 +198,21 @@
   </joint>
   <link name="camera_mast_link">
     <visual>
-      <geometry><box size="0.025 0.025 0.22"/></geometry>
+      <origin xyz="0 0 0.15"/>
+      <geometry><box size="0.025 0.025 0.30"/></geometry>
       <material name="dark_grey"/>
     </visual>
     <inertial>
       <mass value="0.1"/>
-      <origin xyz="0 0 0"/>
-      <inertia ixx="4e-4" ixy="0" ixz="0" iyy="4e-4" iyz="0" izz="1e-5"/>
+      <origin xyz="0 0 0.15"/>
+      <!-- 0.10 kg box 0.025×0.025×0.30: Ixx=Iyy=m(y²+z²)/12≈7.6e-4 -->
+      <inertia ixx="7.6e-4" ixy="0" ixz="0" iyy="7.6e-4" iyz="0" izz="1e-5"/>
     </inertial>
   </link>
 
-  <!-- camera_link: tip of mast, tilted 20° down to see workspace -->
+  <!-- camera_link: top of mast (z=0.55m), tilted 25° down to see table surface -->
   <joint name="camera_joint" type="fixed">
-    <origin xyz="0.02 0 0.11" rpy="0 0.349 0"/>
+    <origin xyz="0.02 0 0.30" rpy="0 0.436 0"/>
     <parent link="camera_mast_link"/>
     <child  link="camera_link"/>
   </joint>

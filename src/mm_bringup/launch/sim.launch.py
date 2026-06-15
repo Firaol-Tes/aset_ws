@@ -48,12 +48,13 @@ def generate_launch_description():
     robot_description = {'robot_description': robot_description_content}
 
     # ── 2. Gazebo Harmonic ────────────────────────────────────────────────────
-    world_file = os.path.join(mm_bringup, 'worlds', 'warehouse.sdf')
+    world_file  = os.path.join(mm_bringup, 'worlds', 'warehouse.sdf')
+    gui_config  = os.path.join(mm_bringup, 'config', 'gz_gui.config')
     gz_sim = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(ros_gz_sim, 'launch', 'gz_sim.launch.py')
         ),
-        launch_arguments={'gz_args': f'-r {world_file}'}.items(),
+        launch_arguments={'gz_args': f'-r --gui-config {gui_config} {world_file}'}.items(),
     )
 
     # ── 3. robot_state_publisher ──────────────────────────────────────────────
@@ -80,6 +81,18 @@ def generate_launch_description():
     bridge = RosGzBridge(
         bridge_name='gz_bridge',
         config_file=os.path.join(mm_bringup, 'config', 'gz_bridge.yaml'),
+    )
+
+    # ── 5b. twist_stamper: Gazebo Teleop Twist → TwistStamped for controller ─
+    teleop_stamper = Node(
+        package='twist_stamper',
+        executable='twist_stamper',
+        parameters=[{'use_sim_time': True, 'frame_id': 'base_footprint'}],
+        remappings=[
+            ('/cmd_vel_in',  '/teleop_twist'),
+            ('/cmd_vel_out', '/diff_drive_controller/cmd_vel'),
+        ],
+        output='screen',
     )
 
     # ── 6. Controller spawners ────────────────────────────────────────────────
@@ -129,6 +142,7 @@ def generate_launch_description():
         rsp,
         spawn_robot,
         bridge,
+        teleop_stamper,
         spawn_controllers,
         start_after_jsb,
     ])

@@ -41,6 +41,13 @@
   gz_type_name:   gz.msgs.CameraInfo
   direction:      GZ_TO_ROS
 
+# ── Gazebo GUI Teleop → twist_stamper → diff_drive_controller ─────────
+- ros_topic_name: /teleop_twist
+  gz_topic_name:  /teleop_cmd_vel
+  ros_type_name:  geometry_msgs/msg/Twist
+  gz_type_name:   gz.msgs.Twist
+  direction:      GZ_TO_ROS
+
 # ── Grasp attachment (ROS → gz DetachableJoint) ───────────────────────
 - ros_topic_name: /grasp/red_cube
   gz_topic_name:  /grasp/red_cube
