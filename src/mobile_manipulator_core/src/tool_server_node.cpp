@@ -19,6 +19,7 @@
 #include <fstream>
 #include <map>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
@@ -26,10 +27,14 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <std_msgs/msg/bool.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
 #include <nav2_msgs/action/navigate_to_pose.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <tf2/LinearMath/Quaternion.h>
+#include <tf2/LinearMath/Matrix3x3.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/transform_listener.h>
 
 #include <moveit/move_group_interface/move_group_interface.hpp>
 
@@ -59,8 +64,12 @@ public:
     // ── Nav2 action client ──────────────────────────────────────────────────
     nav_client_ = rclcpp_action::create_client<NavigateToPose>(this, "navigate_to_pose");
 
-    // ── Scene-state service client ──────────────────────────────────────────
-    state_client_ = create_client<mm_interfaces::srv::GetSceneState>("/get_scene_state");
+    // ── TF + joint states for get_state ────────────────────────────────────
+    tf_buffer_   = std::make_shared<tf2_ros::Buffer>(get_clock());
+    tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_, this);
+    joint_sub_   = create_subscription<sensor_msgs::msg::JointState>(
+      "/joint_states", 10,
+      [this](sensor_msgs::msg::JointState::SharedPtr m) { latest_joints_ = m; });
 
     // ── Grasp/release publishers (direct, one per known object) ────────────
     for (const auto& obj : {"red_cube", "green_cube", "blue_cube"}) {
@@ -408,23 +417,72 @@ private:
     log_call("close_gripper", "", ok, ms_since(t0));
   }
 
-  // ── Get state (proxy to state_manager) ───────────────────────────────────
+  // ── Get state (built directly — avoids service-within-service deadlock) ──
 
   void state_cb(
     const mm_interfaces::srv::GetSceneState::Request::SharedPtr,
     mm_interfaces::srv::GetSceneState::Response::SharedPtr resp)
   {
-    if (!state_client_->wait_for_service(std::chrono::seconds(2))) {
-      resp->state_text = "(state_manager not available)";
-      return;
+    std::ostringstream ss;
+    ss << std::fixed;
+    ss.precision(3);
+    ss << "=== SCENE STATE  (t=" << now().seconds() << ") ===\n\n";
+
+    // Robot pose via TF
+    bool got_pose = false;
+    for (const char* ref : {"map", "odom"}) {
+      try {
+        auto tf = tf_buffer_->lookupTransform(ref, "base_footprint", tf2::TimePointZero);
+        double x = tf.transform.translation.x;
+        double y = tf.transform.translation.y;
+        tf2::Quaternion q(
+          tf.transform.rotation.x, tf.transform.rotation.y,
+          tf.transform.rotation.z, tf.transform.rotation.w);
+        double roll, pitch, yaw;
+        tf2::Matrix3x3(q).getRPY(roll, pitch, yaw);
+        ss << "ROBOT POSE [" << ref << " frame]:\n"
+           << "  x=" << x << "  y=" << y << "  yaw=" << yaw << " rad\n\n";
+        (void)roll; (void)pitch;
+        got_pose = true; break;
+      } catch (...) {}
     }
-    auto req = std::make_shared<mm_interfaces::srv::GetSceneState::Request>();
-    auto future = state_client_->async_send_request(req);
-    if (future.wait_for(std::chrono::seconds(3)) == std::future_status::ready) {
-      resp->state_text = future.get()->state_text;
+    if (!got_pose) ss << "ROBOT POSE: (TF unavailable)\n\n";
+
+    // Arm/gripper joint positions
+    ss << "ARM JOINTS:\n";
+    if (latest_joints_) {
+      for (size_t i = 0; i < latest_joints_->name.size(); ++i) {
+        const auto& n = latest_joints_->name[i];
+        if (n.rfind("joint", 0) == 0 && !latest_joints_->position.empty()) {
+          ss << "  " << n << ": " << latest_joints_->position[i] << " rad\n";
+        }
+      }
     } else {
-      resp->state_text = "(state service timed out)";
+      ss << "  (joint_states not received)\n";
     }
+    ss << "\n";
+
+    // Detected objects (latest cached)
+    ss << "DETECTED OBJECTS:\n";
+    if (latest_detections_ && !latest_detections_->detections.empty()) {
+      for (const auto& d : latest_detections_->detections) {
+        ss << "  " << d.label << " [" << d.color << "]"
+           << "  pos=(" << d.x << ", " << d.y << ", " << d.z << ")"
+           << "  conf=" << d.confidence << "\n";
+      }
+    } else {
+      ss << "  (none)\n";
+    }
+    ss << "\n";
+
+    // Known locations
+    ss << "KNOWN LOCATIONS:\n";
+    for (const auto& [name, loc] : locations_) {
+      ss << "  " << name
+         << ":  x=" << loc.x << "  y=" << loc.y << "  yaw=" << loc.yaw << "\n";
+    }
+
+    resp->state_text = ss.str();
   }
 
   // ── Utility ──────────────────────────────────────────────────────────────
@@ -438,7 +496,9 @@ private:
   // ── Members ───────────────────────────────────────────────────────────────
 
   rclcpp_action::Client<NavigateToPose>::SharedPtr nav_client_;
-  rclcpp::Client<mm_interfaces::srv::GetSceneState>::SharedPtr state_client_;
+  std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
+  std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
+  rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_sub_;
   rclcpp::Subscription<mm_interfaces::msg::DetectionArray>::SharedPtr detect_sub_;
 
   std::map<std::string, rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr> grasp_pubs_;
@@ -457,6 +517,7 @@ private:
   std::shared_ptr<moveit::planning_interface::MoveGroupInterface> arm_mgi_;
   std::shared_ptr<moveit::planning_interface::MoveGroupInterface> gripper_mgi_;
 
+  sensor_msgs::msg::JointState::SharedPtr latest_joints_;
   mm_interfaces::msg::DetectionArray::SharedPtr latest_detections_;
   std::map<std::string, Location> locations_;
   std::string held_object_;

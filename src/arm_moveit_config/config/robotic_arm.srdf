@@ -47,7 +47,7 @@
 
   <!-- joint6 fully open (1.57 rad ≈ 90°) -->
   <group_state name="open" group="gripper">
-    <joint name="joint6" value="1.57"/>
+    <joint name="joint6" value="1.5"/>
   </group_state>
 
   <!-- joint6 = 0 → neutral/closed (both fingers at reference zero) -->
