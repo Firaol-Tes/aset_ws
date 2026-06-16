@@ -169,8 +169,7 @@ private:
     if (it == locations_.end()) {
       resp->success = false;
       resp->message = "Unknown location: " + req->location;
-      log_call("navigate_to", req->location, false,
-               ms_since(t0)); return;
+      log_call("navigate_to", req->location, false, ms_since(t0)); return;
     }
 
     if (!nav_client_->wait_for_action_server(std::chrono::seconds(5))) {
@@ -191,32 +190,44 @@ private:
     q.setRPY(0.0, 0.0, loc.yaw);
     goal.pose.pose.orientation = tf2::toMsg(q);
 
-    auto send_opts = rclcpp_action::Client<NavigateToPose>::SendGoalOptions();
-    auto goal_future = nav_client_->async_send_goal(goal, send_opts);
+    // Use explicit callbacks + promises so other executor threads can dispatch
+    // the goal/result callbacks while this service-callback thread waits.
+    auto goal_prom   = std::make_shared<std::promise<GoalHandleNav::SharedPtr>>();
+    auto goal_fut    = goal_prom->get_future();
+    auto result_prom = std::make_shared<std::promise<rclcpp_action::ResultCode>>();
+    auto result_fut  = result_prom->get_future();
 
-    if (goal_future.wait_for(std::chrono::seconds(5)) != std::future_status::ready) {
+    rclcpp_action::Client<NavigateToPose>::SendGoalOptions opts;
+    opts.goal_response_callback =
+      [goal_prom](const GoalHandleNav::SharedPtr& gh) mutable {
+        goal_prom->set_value(gh);
+      };
+    opts.result_callback =
+      [result_prom](const GoalHandleNav::WrappedResult& wr) mutable {
+        result_prom->set_value(wr.code);
+      };
+
+    nav_client_->async_send_goal(goal, opts);
+
+    if (goal_fut.wait_for(std::chrono::seconds(10)) != std::future_status::ready) {
       resp->success = false;
       resp->message = "Timed out waiting for goal acceptance";
       log_call("navigate_to", req->location, false, ms_since(t0)); return;
     }
-
-    auto gh = goal_future.get();
+    auto gh = goal_fut.get();
     if (!gh) {
       resp->success = false;
       resp->message = "Goal rejected by server";
       log_call("navigate_to", req->location, false, ms_since(t0)); return;
     }
 
-    auto result_future = nav_client_->async_get_result(gh);
-    // Navigation can take a long time — wait up to 120 s
-    if (result_future.wait_for(std::chrono::seconds(120)) != std::future_status::ready) {
+    if (result_fut.wait_for(std::chrono::seconds(120)) != std::future_status::ready) {
       resp->success = false;
       resp->message = "Navigation timed out (120 s)";
       log_call("navigate_to", req->location, false, ms_since(t0)); return;
     }
 
-    auto result = result_future.get();
-    bool ok = (result.code == rclcpp_action::ResultCode::SUCCEEDED);
+    bool ok = (result_fut.get() == rclcpp_action::ResultCode::SUCCEEDED);
     resp->success = ok;
     resp->message = ok ? "Arrived at " + req->location : "Navigation failed";
     log_call("navigate_to", req->location, ok, ms_since(t0));
