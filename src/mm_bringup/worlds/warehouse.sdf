@@ -213,56 +213,43 @@
     </link>
   </model>
 
-  <!-- ═══════ pick table (static, top surface at z=0.38 m) ══════════ -->
+  <!-- ═══════ pick table (compact, front-legs-only so robot can park close)
+       Centre at x=2.05; tabletop surface top at z=0.38 m (cube centre 0.40).
+       No back legs — robot approaches from -x and pulls right up to the shelf.
+       Robot radius 0.35 m parks at x=1.6 → front edge at x=1.95 → 4 cm gap to
+       tabletop back face at x=1.99.  Arm base at x=1.70 (10 cm forward mount)
+       → reach to cube at x=2.0 ≈ 0.33 m, well within 0.41 m chain length. -->
   <model name="pick_table">
     <static>true</static>
-    <pose>2.5 0 0 0 0 0</pose>
+    <pose>2.05 0 0 0 0 0</pose>
     <link name="link">
-      <!-- tabletop -->
+      <!-- tabletop: 12 cm deep (x: -0.06 … +0.06), 60 cm wide -->
       <collision name="top">
         <pose>0 0 0.36 0 0 0</pose>
-        <geometry><box><size>0.80 0.60 0.04</size></box></geometry>
+        <geometry><box><size>0.12 0.60 0.04</size></box></geometry>
       </collision>
       <visual name="top">
         <pose>0 0 0.36 0 0 0</pose>
-        <geometry><box><size>0.80 0.60 0.04</size></box></geometry>
+        <geometry><box><size>0.12 0.60 0.04</size></box></geometry>
         <material><ambient>0.6 0.4 0.2 1</ambient><diffuse>0.7 0.5 0.3 1</diffuse></material>
       </visual>
-      <!-- legs -->
-      <collision name="leg_fl">
-        <pose> 0.36  0.26 0.17 0 0 0</pose>
-        <geometry><box><size>0.05 0.05 0.34</size></box></geometry>
+      <!-- Front legs only — at local x=+0.05 (world x=2.10), y=±0.25 -->
+      <collision name="leg_l">
+        <pose>0.05  0.25 0.17 0 0 0</pose>
+        <geometry><box><size>0.04 0.04 0.34</size></box></geometry>
       </collision>
-      <visual name="leg_fl">
-        <pose> 0.36  0.26 0.17 0 0 0</pose>
-        <geometry><box><size>0.05 0.05 0.34</size></box></geometry>
+      <visual name="leg_l">
+        <pose>0.05  0.25 0.17 0 0 0</pose>
+        <geometry><box><size>0.04 0.04 0.34</size></box></geometry>
         <material><ambient>0.4 0.3 0.2 1</ambient><diffuse>0.5 0.4 0.3 1</diffuse></material>
       </visual>
-      <collision name="leg_fr">
-        <pose> 0.36 -0.26 0.17 0 0 0</pose>
-        <geometry><box><size>0.05 0.05 0.34</size></box></geometry>
+      <collision name="leg_r">
+        <pose>0.05 -0.25 0.17 0 0 0</pose>
+        <geometry><box><size>0.04 0.04 0.34</size></box></geometry>
       </collision>
-      <visual name="leg_fr">
-        <pose> 0.36 -0.26 0.17 0 0 0</pose>
-        <geometry><box><size>0.05 0.05 0.34</size></box></geometry>
-        <material><ambient>0.4 0.3 0.2 1</ambient><diffuse>0.5 0.4 0.3 1</diffuse></material>
-      </visual>
-      <collision name="leg_bl">
-        <pose>-0.36  0.26 0.17 0 0 0</pose>
-        <geometry><box><size>0.05 0.05 0.34</size></box></geometry>
-      </collision>
-      <visual name="leg_bl">
-        <pose>-0.36  0.26 0.17 0 0 0</pose>
-        <geometry><box><size>0.05 0.05 0.34</size></box></geometry>
-        <material><ambient>0.4 0.3 0.2 1</ambient><diffuse>0.5 0.4 0.3 1</diffuse></material>
-      </visual>
-      <collision name="leg_br">
-        <pose>-0.36 -0.26 0.17 0 0 0</pose>
-        <geometry><box><size>0.05 0.05 0.34</size></box></geometry>
-      </collision>
-      <visual name="leg_br">
-        <pose>-0.36 -0.26 0.17 0 0 0</pose>
-        <geometry><box><size>0.05 0.05 0.34</size></box></geometry>
+      <visual name="leg_r">
+        <pose>0.05 -0.25 0.17 0 0 0</pose>
+        <geometry><box><size>0.04 0.04 0.34</size></box></geometry>
         <material><ambient>0.4 0.3 0.2 1</ambient><diffuse>0.5 0.4 0.3 1</diffuse></material>
       </visual>
       <inertial><mass>0.001</mass><inertia><ixx>1</ixx><iyy>1</iyy><izz>1</izz></inertia></inertial>
@@ -275,7 +262,7 @@
        /release/<color>_cube (Bool True) detaches it. -->
 
   <model name="red_cube">
-    <pose>2.5 0.05 0.40 0 0 0</pose>
+    <pose>2.0 0.05 0.40 0 0 0</pose>
     <link name="link">
       <collision name="col">
         <geometry><box><size>0.04 0.04 0.04</size></box></geometry>
@@ -305,7 +292,7 @@
   </model>
 
   <model name="green_cube">
-    <pose>2.5 0.00 0.40 0 0 0</pose>
+    <pose>2.0 0.00 0.40 0 0 0</pose>
     <link name="link">
       <collision name="col">
         <geometry><box><size>0.04 0.04 0.04</size></box></geometry>
@@ -334,7 +321,7 @@
   </model>
 
   <model name="blue_cube">
-    <pose>2.5 -0.05 0.40 0 0 0</pose>
+    <pose>2.0 -0.05 0.40 0 0 0</pose>
     <link name="link">
       <collision name="col">
         <geometry><box><size>0.04 0.04 0.04</size></box></geometry>

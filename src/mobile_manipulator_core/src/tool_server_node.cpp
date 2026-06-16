@@ -16,6 +16,7 @@
  */
 
 #include <chrono>
+#include <cmath>
 #include <fstream>
 #include <map>
 #include <memory>
@@ -316,15 +317,16 @@ private:
   }
 
   // ── Pick ─────────────────────────────────────────────────────────────────
+  // Uses real IK to the cube's detected 3-D position so that the pick can
+  // fail cleanly when the robot is not parked close enough.
 
   void pick_cb(
     const mm_interfaces::srv::Pick::Request::SharedPtr req,
     mm_interfaces::srv::Pick::Response::SharedPtr resp)
   {
     auto t0 = std::chrono::steady_clock::now();
-    RCLCPP_INFO(get_logger(), "[pick] label='%s'", req->object_label.c_str());
-
     const std::string& label = req->object_label;
+    RCLCPP_INFO(get_logger(), "[pick] label='%s'", label.c_str());
 
     if (grasp_pubs_.find(label) == grasp_pubs_.end()) {
       resp->success = false;
@@ -332,33 +334,80 @@ private:
       log_call("pick", label, false, ms_since(t0)); return;
     }
 
-    // 1. Open gripper
+    // 1. Locate the object in the latest detection cache
+    if (!latest_detections_ || latest_detections_->detections.empty()) {
+      resp->success = false;
+      resp->message = "No detections available — call detect_objects first";
+      log_call("pick", label, false, ms_since(t0)); return;
+    }
+    double ox = 0.0, oy = 0.0, oz = 0.0;
+    bool found = false;
+    for (const auto& d : latest_detections_->detections) {
+      if (d.label == label) { ox = d.x; oy = d.y; oz = d.z; found = true; break; }
+    }
+    if (!found) {
+      resp->success = false;
+      resp->message = label + " not found in current detections";
+      log_call("pick", label, false, ms_since(t0)); return;
+    }
+    RCLCPP_INFO(get_logger(), "[pick] %s at map(%.3f, %.3f, %.3f)", label.c_str(), ox, oy, oz);
+
+    // 2. Open gripper before approaching
     gripper_mgi_->setNamedTarget("open");
     gripper_mgi_->move();
 
-    // 2. Reach toward object
-    arm_mgi_->setNamedTarget("ready");
+    // Approach orientation: same RPY used by move_arm_to_pose (empirically OK)
+    tf2::Quaternion q_app;
+    q_app.setRPY(0.0, M_PI / 2.0, 0.0);
+    auto approach_ori = tf2::toMsg(q_app);
+    arm_mgi_->setPoseReferenceFrame("map");
+
+    // 3. Pre-grasp: 12 cm above the cube
+    geometry_msgs::msg::Pose pre_grasp;
+    pre_grasp.position.x = ox;
+    pre_grasp.position.y = oy;
+    pre_grasp.position.z = oz + 0.12;
+    pre_grasp.orientation = approach_ori;
+    arm_mgi_->setPoseTarget(pre_grasp);
+
     if (arm_mgi_->move() != moveit::core::MoveItErrorCode::SUCCESS) {
       resp->success = false;
-      resp->message = "Arm failed to reach ready pose";
+      resp->message = label + " is out of reach (pre-grasp IK failed)";
       log_call("pick", label, false, ms_since(t0)); return;
     }
 
-    // 3. Close gripper (visual grasp)
+    // 4. Descend to cube centre
+    geometry_msgs::msg::Pose grasp_pose = pre_grasp;
+    grasp_pose.position.z = oz;
+    arm_mgi_->setPoseTarget(grasp_pose);
+
+    if (arm_mgi_->move() != moveit::core::MoveItErrorCode::SUCCESS) {
+      // Retreat before returning failure
+      arm_mgi_->setNamedTarget("home");
+      arm_mgi_->move();
+      resp->success = false;
+      resp->message = label + " grasp position unreachable (descent IK failed)";
+      log_call("pick", label, false, ms_since(t0)); return;
+    }
+
+    // 5. Close gripper and weld the cube via DetachableJoint
     gripper_mgi_->setNamedTarget("closed");
     gripper_mgi_->move();
 
-    // 4. Attach via DetachableJoint
     std_msgs::msg::Bool attach_msg;
     attach_msg.data = true;
     grasp_pubs_[label]->publish(attach_msg);
     std::this_thread::sleep_for(std::chrono::milliseconds(250));
 
-    // 5. Lift to home (carry position)
+    // 6. Lift 15 cm (best-effort: cube is now attached, so we always retract)
+    geometry_msgs::msg::Pose lift_pose = grasp_pose;
+    lift_pose.position.z = oz + 0.15;
+    arm_mgi_->setPoseTarget(lift_pose);
+    arm_mgi_->move();
+
+    // 7. Carry at home (tucked position for navigation)
     arm_mgi_->setNamedTarget("home");
-    if (arm_mgi_->move() != moveit::core::MoveItErrorCode::SUCCESS) {
-      RCLCPP_WARN(get_logger(), "[pick] arm failed to retract to home");
-    }
+    arm_mgi_->move();
 
     held_object_ = label;
     resp->success = true;
@@ -368,6 +417,8 @@ private:
   }
 
   // ── Place ────────────────────────────────────────────────────────────────
+  // Tries IK to above the location coordinates; falls back to "ready" if IK
+  // fails (e.g. location out of arm reach from current robot parking spot).
 
   void place_cb(
     const mm_interfaces::srv::Place::Request::SharedPtr req,
@@ -382,15 +433,43 @@ private:
       log_call("place", req->location_name, false, ms_since(t0)); return;
     }
 
-    // 1. Extend arm to place position
-    arm_mgi_->setNamedTarget("ready");
-    arm_mgi_->move();
+    // 1. Try IK to location coordinates (same height the cube was picked at)
+    const double PLACE_Z = 0.43;  // ~cube height above floor, near table level
+    bool placed_via_ik = false;
 
-    // 2. Open gripper
+    auto it = locations_.find(req->location_name);
+    if (it != locations_.end()) {
+      tf2::Quaternion q_pl;
+      q_pl.setRPY(0.0, M_PI / 2.0, 0.0);
+      arm_mgi_->setPoseReferenceFrame("map");
+
+      geometry_msgs::msg::Pose pre_place;
+      pre_place.position.x = it->second.x;
+      pre_place.position.y = it->second.y;
+      pre_place.position.z = PLACE_Z + 0.12;
+      pre_place.orientation = tf2::toMsg(q_pl);
+      arm_mgi_->setPoseTarget(pre_place);
+
+      if (arm_mgi_->move() == moveit::core::MoveItErrorCode::SUCCESS) {
+        // Descend to place height (best-effort: cube is attached, so safe)
+        geometry_msgs::msg::Pose place_pose = pre_place;
+        place_pose.position.z = PLACE_Z;
+        arm_mgi_->setPoseTarget(place_pose);
+        arm_mgi_->move();
+        placed_via_ik = true;
+      }
+    }
+
+    if (!placed_via_ik) {
+      // Fallback: extend arm to "ready" and drop from there
+      arm_mgi_->setNamedTarget("ready");
+      arm_mgi_->move();
+    }
+
+    // 2. Open gripper and release DetachableJoint
     gripper_mgi_->setNamedTarget("open");
     gripper_mgi_->move();
 
-    // 3. Detach via DetachableJoint
     std_msgs::msg::Bool release_msg;
     release_msg.data = true;
     release_pubs_[held_object_]->publish(release_msg);
@@ -399,12 +478,13 @@ private:
     std::string placed = held_object_;
     held_object_.clear();
 
-    // 4. Retract arm
+    // 3. Retract arm to home
     arm_mgi_->setNamedTarget("home");
     arm_mgi_->move();
 
     resp->success = true;
-    resp->message = "Placed " + placed + " at " + req->location_name;
+    resp->message = "Placed " + placed + " at " + req->location_name
+                    + (placed_via_ik ? "" : " (fallback drop)");
     log_call("place", req->location_name, true, ms_since(t0));
     RCLCPP_INFO(get_logger(), "[place] %s", resp->message.c_str());
   }

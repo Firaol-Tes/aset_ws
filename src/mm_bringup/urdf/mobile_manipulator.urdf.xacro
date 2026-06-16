@@ -5,9 +5,10 @@
     Combined mobile manipulator = differential-drive base + 6-DOF arm.
 
     The arm's world_joint leveling correction (8.1° tilt from PCA plane fit)
-    is preserved in arm_mount_joint with the same xyz/rpy as world_joint:
+    is preserved in arm_mount_joint.  rpy is identical to world_joint.
       rpy = "0.129355 -0.057284 -0.003711"
-      xyz z = 0.029710 m  (base-plate bottom sits flush on chassis top)
+      xyz = "0.10 0 0.029710"  (10 cm forward of chassis centre so the arm
+        can reach objects on the pick table ~30 cm ahead of the parking spot)
 
     TF chain in simulation:
       map → odom → base_footprint → chassis_link → chassis_top_link
@@ -30,9 +31,11 @@
   <!-- Arm (kinematics only: no world link, no ros2_control block) -->
   <xacro:include filename="$(find robotic_arm_description)/urdf/robotic_arm.urdf.xacro"/>
 
-  <!-- Mount arm on chassis top, preserving the SW-export leveling correction -->
+  <!-- Mount arm on chassis top, 10 cm forward of centre so the arm reaches
+       objects placed ~30 cm ahead of the robot (cube at x=2.0, robot at x=1.6
+       → arm base at x=1.7, reach needed ≈ 0.33 m < 0.41 m chain length). -->
   <joint name="arm_mount_joint" type="fixed">
-    <origin xyz="0 0 0.029710" rpy="0.129355 -0.057284 -0.003711"/>
+    <origin xyz="0.10 0 0.029710" rpy="0.129355 -0.057284 -0.003711"/>
     <parent link="chassis_top_link"/>
     <child  link="base_link"/>
   </joint>
