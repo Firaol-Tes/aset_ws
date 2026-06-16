@@ -356,18 +356,21 @@ private:
     gripper_mgi_->setNamedTarget("open");
     gripper_mgi_->move();
 
-    // Approach orientation: same RPY used by move_arm_to_pose (empirically OK)
-    tf2::Quaternion q_app;
-    q_app.setRPY(0.0, M_PI / 2.0, 0.0);
-    auto approach_ori = tf2::toMsg(q_app);
+    // Position-only IK: accept any gripper orientation so the solver has
+    // maximum freedom with this arm's complex SolidWorks joint frames.
+    arm_mgi_->setGoalOrientationTolerance(M_PI);
     arm_mgi_->setPoseReferenceFrame("map");
 
-    // 3. Pre-grasp: 12 cm above the cube
+    // Nominal approach orientation (may be overridden by solver since tolerance=π)
+    tf2::Quaternion q_app;
+    q_app.setRPY(0.0, M_PI / 2.0, 0.0);
+
+    // 3. Pre-grasp: 5 cm above the cube (small offset reduces total reach needed)
     geometry_msgs::msg::Pose pre_grasp;
     pre_grasp.position.x = ox;
     pre_grasp.position.y = oy;
-    pre_grasp.position.z = oz + 0.12;
-    pre_grasp.orientation = approach_ori;
+    pre_grasp.position.z = oz + 0.05;
+    pre_grasp.orientation = tf2::toMsg(q_app);
     arm_mgi_->setPoseTarget(pre_grasp);
 
     if (arm_mgi_->move() != moveit::core::MoveItErrorCode::SUCCESS) {
@@ -399,9 +402,9 @@ private:
     grasp_pubs_[label]->publish(attach_msg);
     std::this_thread::sleep_for(std::chrono::milliseconds(250));
 
-    // 6. Lift 15 cm (best-effort: cube is now attached, so we always retract)
+    // 6. Lift 10 cm above cube (cube is now attached, so we always retract)
     geometry_msgs::msg::Pose lift_pose = grasp_pose;
-    lift_pose.position.z = oz + 0.15;
+    lift_pose.position.z = oz + 0.10;
     arm_mgi_->setPoseTarget(lift_pose);
     arm_mgi_->move();
 
@@ -439,6 +442,7 @@ private:
 
     auto it = locations_.find(req->location_name);
     if (it != locations_.end()) {
+      arm_mgi_->setGoalOrientationTolerance(M_PI);
       tf2::Quaternion q_pl;
       q_pl.setRPY(0.0, M_PI / 2.0, 0.0);
       arm_mgi_->setPoseReferenceFrame("map");
