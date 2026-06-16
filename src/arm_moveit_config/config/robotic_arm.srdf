@@ -69,7 +69,7 @@
   <!-- Gripper fingers move together (mimic) — treat as adjacent -->
   <disable_collisions link1="gripper_1"       link2="gripper_2"        reason="Adjacent"/>
 
-  <!-- Non-adjacent pairs that geometry prevents from ever colliding -->
+  <!-- Non-adjacent arm-only pairs -->
   <disable_collisions link1="base_link"      link2="upper_arm"         reason="Never"/>
   <disable_collisions link1="base_link"      link2="shoulder_drive"    reason="Never"/>
   <disable_collisions link1="base_link"      link2="rotary_yoke"       reason="Never"/>
@@ -97,5 +97,79 @@
   <disable_collisions link1="rotary_yoke"    link2="gripper_2"         reason="Never"/>
   <disable_collisions link1="wrist_module"   link2="gripper_1"         reason="Never"/>
   <disable_collisions link1="wrist_module"   link2="gripper_2"         reason="Never"/>
+
+  <!-- Arm mounted on mobile base via arm_mount_joint (fixed):
+       disable all arm/gripper vs mobile-base-link collisions.
+       Without these, MoveIt's collision checker sees the gripper fingers
+       sweeping into the chassis geometry during gripper-open planning. -->
+  <disable_collisions link1="base_link"        link2="chassis_top_link"   reason="Adjacent"/>
+  <disable_collisions link1="base_link"        link2="chassis_link"       reason="Never"/>
+  <disable_collisions link1="base_link"        link2="base_footprint"     reason="Never"/>
+  <disable_collisions link1="base_link"        link2="left_wheel_link"    reason="Never"/>
+  <disable_collisions link1="base_link"        link2="right_wheel_link"   reason="Never"/>
+  <disable_collisions link1="base_link"        link2="front_caster_link"  reason="Never"/>
+  <disable_collisions link1="base_link"        link2="rear_caster_link"   reason="Never"/>
+  <disable_collisions link1="base_link"        link2="lidar_link"         reason="Never"/>
+  <disable_collisions link1="base_link"        link2="imu_link"           reason="Never"/>
+  <disable_collisions link1="base_link"        link2="camera_mast_link"   reason="Never"/>
+  <disable_collisions link1="base_link"        link2="camera_link"        reason="Never"/>
+  <disable_collisions link1="base_link"        link2="camera_optical_link" reason="Never"/>
+
+  <disable_collisions link1="lower_arm"        link2="chassis_top_link"   reason="Never"/>
+  <disable_collisions link1="lower_arm"        link2="chassis_link"       reason="Never"/>
+  <disable_collisions link1="lower_arm"        link2="camera_mast_link"   reason="Never"/>
+  <disable_collisions link1="lower_arm"        link2="camera_link"        reason="Never"/>
+
+  <disable_collisions link1="upper_arm"        link2="chassis_top_link"   reason="Never"/>
+  <disable_collisions link1="upper_arm"        link2="chassis_link"       reason="Never"/>
+  <disable_collisions link1="upper_arm"        link2="camera_mast_link"   reason="Never"/>
+
+  <disable_collisions link1="shoulder_drive"   link2="chassis_top_link"   reason="Never"/>
+  <disable_collisions link1="shoulder_drive"   link2="chassis_link"       reason="Never"/>
+
+  <disable_collisions link1="rotary_yoke"      link2="chassis_top_link"   reason="Never"/>
+  <disable_collisions link1="rotary_yoke"      link2="chassis_link"       reason="Never"/>
+
+  <disable_collisions link1="wrist_module"     link2="chassis_top_link"   reason="Never"/>
+  <disable_collisions link1="wrist_module"     link2="chassis_link"       reason="Never"/>
+
+  <disable_collisions link1="gripper_actuator" link2="chassis_top_link"   reason="Never"/>
+  <disable_collisions link1="gripper_actuator" link2="chassis_link"       reason="Never"/>
+  <disable_collisions link1="gripper_actuator" link2="base_footprint"     reason="Never"/>
+  <disable_collisions link1="gripper_actuator" link2="left_wheel_link"    reason="Never"/>
+  <disable_collisions link1="gripper_actuator" link2="right_wheel_link"   reason="Never"/>
+  <disable_collisions link1="gripper_actuator" link2="front_caster_link"  reason="Never"/>
+  <disable_collisions link1="gripper_actuator" link2="rear_caster_link"   reason="Never"/>
+  <disable_collisions link1="gripper_actuator" link2="lidar_link"         reason="Never"/>
+  <disable_collisions link1="gripper_actuator" link2="imu_link"           reason="Never"/>
+  <disable_collisions link1="gripper_actuator" link2="camera_mast_link"   reason="Never"/>
+  <disable_collisions link1="gripper_actuator" link2="camera_link"        reason="Never"/>
+  <disable_collisions link1="gripper_actuator" link2="camera_optical_link" reason="Never"/>
+
+  <disable_collisions link1="gripper_1"        link2="chassis_top_link"   reason="Never"/>
+  <disable_collisions link1="gripper_1"        link2="chassis_link"       reason="Never"/>
+  <disable_collisions link1="gripper_1"        link2="base_footprint"     reason="Never"/>
+  <disable_collisions link1="gripper_1"        link2="left_wheel_link"    reason="Never"/>
+  <disable_collisions link1="gripper_1"        link2="right_wheel_link"   reason="Never"/>
+  <disable_collisions link1="gripper_1"        link2="front_caster_link"  reason="Never"/>
+  <disable_collisions link1="gripper_1"        link2="rear_caster_link"   reason="Never"/>
+  <disable_collisions link1="gripper_1"        link2="lidar_link"         reason="Never"/>
+  <disable_collisions link1="gripper_1"        link2="imu_link"           reason="Never"/>
+  <disable_collisions link1="gripper_1"        link2="camera_mast_link"   reason="Never"/>
+  <disable_collisions link1="gripper_1"        link2="camera_link"        reason="Never"/>
+  <disable_collisions link1="gripper_1"        link2="camera_optical_link" reason="Never"/>
+
+  <disable_collisions link1="gripper_2"        link2="chassis_top_link"   reason="Never"/>
+  <disable_collisions link1="gripper_2"        link2="chassis_link"       reason="Never"/>
+  <disable_collisions link1="gripper_2"        link2="base_footprint"     reason="Never"/>
+  <disable_collisions link1="gripper_2"        link2="left_wheel_link"    reason="Never"/>
+  <disable_collisions link1="gripper_2"        link2="right_wheel_link"   reason="Never"/>
+  <disable_collisions link1="gripper_2"        link2="front_caster_link"  reason="Never"/>
+  <disable_collisions link1="gripper_2"        link2="rear_caster_link"   reason="Never"/>
+  <disable_collisions link1="gripper_2"        link2="lidar_link"         reason="Never"/>
+  <disable_collisions link1="gripper_2"        link2="imu_link"           reason="Never"/>
+  <disable_collisions link1="gripper_2"        link2="camera_mast_link"   reason="Never"/>
+  <disable_collisions link1="gripper_2"        link2="camera_link"        reason="Never"/>
+  <disable_collisions link1="gripper_2"        link2="camera_optical_link" reason="Never"/>
 
 </robot>
