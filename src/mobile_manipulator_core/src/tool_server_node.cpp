@@ -61,8 +61,14 @@ public:
   : Node("tool_server_node",
          rclcpp::NodeOptions().automatically_declare_parameters_from_overrides(true))
   {
-    // ── Nav2 action client ──────────────────────────────────────────────────
-    nav_client_ = rclcpp_action::create_client<NavigateToPose>(this, "navigate_to_pose");
+    // ── Nav2 action client — MUST be in a separate Reentrant callback group.
+    // All callbacks default to the node's MutuallyExclusive group, which means
+    // only one callback runs at a time.  When a blocking service callback holds
+    // that group, the action client's goal_response/result callbacks can never
+    // fire.  A Reentrant group allows them to run concurrently.
+    nav_cb_group_ = create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+    nav_client_ = rclcpp_action::create_client<NavigateToPose>(
+        this, "navigate_to_pose", nav_cb_group_);
 
     // ── TF + joint states for get_state ────────────────────────────────────
     tf_buffer_   = std::make_shared<tf2_ros::Buffer>(get_clock());
@@ -506,6 +512,7 @@ private:
 
   // ── Members ───────────────────────────────────────────────────────────────
 
+  rclcpp::CallbackGroup::SharedPtr nav_cb_group_;
   rclcpp_action::Client<NavigateToPose>::SharedPtr nav_client_;
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
