@@ -143,9 +143,10 @@ public:
     gripper_mgi_ = std::make_shared<moveit::planning_interface::MoveGroupInterface>(
                      shared_from_this(), "gripper");
 
-    arm_mgi_->setMaxVelocityScalingFactor(0.3);
-    arm_mgi_->setMaxAccelerationScalingFactor(0.2);
-    gripper_mgi_->setMaxVelocityScalingFactor(0.5);
+    arm_mgi_->setMaxVelocityScalingFactor(1.0);
+    arm_mgi_->setMaxAccelerationScalingFactor(0.5);
+    gripper_mgi_->setMaxVelocityScalingFactor(1.0);
+    gripper_mgi_->setMaxAccelerationScalingFactor(1.0);
     RCLCPP_INFO(get_logger(), "MoveGroupInterface ready");
   }
 
@@ -351,7 +352,7 @@ private:
     std_msgs::msg::Bool attach_msg;
     attach_msg.data = true;
     grasp_pubs_[label]->publish(attach_msg);
-    std::this_thread::sleep_for(std::chrono::milliseconds(600));
+    std::this_thread::sleep_for(std::chrono::milliseconds(250));
 
     // 5. Lift to home (carry position)
     arm_mgi_->setNamedTarget("home");
@@ -393,7 +394,7 @@ private:
     std_msgs::msg::Bool release_msg;
     release_msg.data = true;
     release_pubs_[held_object_]->publish(release_msg);
-    std::this_thread::sleep_for(std::chrono::milliseconds(600));
+    std::this_thread::sleep_for(std::chrono::milliseconds(250));
 
     std::string placed = held_object_;
     held_object_.clear();
