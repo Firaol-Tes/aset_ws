@@ -227,9 +227,9 @@ private:
       log_call("navigate_to", req->location, false, ms_since(t0)); return;
     }
 
-    if (result_fut.wait_for(std::chrono::seconds(120)) != std::future_status::ready) {
+    if (result_fut.wait_for(std::chrono::seconds(300)) != std::future_status::ready) {
       resp->success = false;
-      resp->message = "Navigation timed out (120 s)";
+      resp->message = "Navigation timed out (300 s)";
       log_call("navigate_to", req->location, false, ms_since(t0)); return;
     }
 
