@@ -51,7 +51,7 @@ class PerceptionNode(Node):
 
         self.declare_parameter('detector', 'color')
         self.declare_parameter('confidence_threshold', 0.45)
-        self.declare_parameter('min_contour_area', 200)
+        self.declare_parameter('min_contour_area', 50)
 
         self._bridge = CvBridge()
         self._cam_model = PinholeCameraModel()
@@ -101,8 +101,13 @@ class PerceptionNode(Node):
 
         detector = self.get_parameter('detector').value
 
-        bgr   = self._bridge.imgmsg_to_cv2(rgb_msg, 'bgr8')
-        depth = self._bridge.imgmsg_to_cv2(depth_msg, '32FC1')
+        bgr = self._bridge.imgmsg_to_cv2(rgb_msg, 'bgr8')
+
+        # Accept 32FC1 (metres) or 16UC1 (millimetres)
+        if depth_msg.encoding == '16UC1':
+            depth = self._bridge.imgmsg_to_cv2(depth_msg, '16UC1').astype(np.float32) / 1000.0
+        else:
+            depth = self._bridge.imgmsg_to_cv2(depth_msg, '32FC1')
 
         if detector == 'yolo':
             dets = self._detect_yolo(bgr, depth, rgb_msg.header)
@@ -120,6 +125,7 @@ class PerceptionNode(Node):
         hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
         min_area = self.get_parameter('min_contour_area').value
         img_pixels = bgr.shape[0] * bgr.shape[1]
+        h, w = bgr.shape[:2]
         detections = []
 
         for label, ranges in _HSV_RANGES.items():
@@ -215,7 +221,10 @@ class PerceptionNode(Node):
         # PinholeCameraModel gives a ray s.t. ray[2]==1 in the optical frame
         ray = self._cam_model.projectPixelTo3dRay((cx, cy))
         pt_cam = PointStamped()
-        pt_cam.header = header
+        pt_cam.header.frame_id = header.frame_id
+        # Use Time(0) = "latest available TF" to avoid extrapolation-into-future errors
+        # that occur when the image timestamp is slightly ahead of SLAM's TF buffer.
+        pt_cam.header.stamp = rclpy.time.Time().to_msg()
         pt_cam.point.x = ray[0] * z
         pt_cam.point.y = ray[1] * z
         pt_cam.point.z = ray[2] * z  # == z for a normalised ray
@@ -227,8 +236,10 @@ class PerceptionNode(Node):
                     pt_cam, target_frame,
                     timeout=rclpy.duration.Duration(seconds=0.1))
                 return (pt_out.point.x, pt_out.point.y, pt_out.point.z)
-            except Exception:
-                pass
+            except Exception as e:
+                self.get_logger().warn(
+                    f'TF {pt_cam.header.frame_id}→{target_frame} failed: {e}',
+                    throttle_duration_sec=3.0)
 
         return None
 

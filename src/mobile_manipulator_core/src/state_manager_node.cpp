@@ -103,7 +103,8 @@ private:
     if (joints_) {
       for (size_t i = 0; i < joints_->name.size(); ++i) {
         const auto& n = joints_->name[i];
-        if (n.find("joint") != std::string::npos && !joints_->position.empty()) {
+        // Only show arm/gripper joints (names that start with "joint")
+        if (n.rfind("joint", 0) == 0 && !joints_->position.empty()) {
           ss << "  " << n << ": " << joints_->position[i] << " rad\n";
         }
       }
