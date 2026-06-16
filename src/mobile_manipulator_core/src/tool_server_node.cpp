@@ -143,10 +143,10 @@ public:
     gripper_mgi_ = std::make_shared<moveit::planning_interface::MoveGroupInterface>(
                      shared_from_this(), "gripper");
 
-    arm_mgi_->setMaxVelocityScalingFactor(1.0);
-    arm_mgi_->setMaxAccelerationScalingFactor(0.5);
-    gripper_mgi_->setMaxVelocityScalingFactor(1.0);
-    gripper_mgi_->setMaxAccelerationScalingFactor(1.0);
+    arm_mgi_->setMaxVelocityScalingFactor(0.8);
+    arm_mgi_->setMaxAccelerationScalingFactor(0.4);
+    gripper_mgi_->setMaxVelocityScalingFactor(0.5);
+    gripper_mgi_->setMaxAccelerationScalingFactor(0.5);
     RCLCPP_INFO(get_logger(), "MoveGroupInterface ready");
   }
 
