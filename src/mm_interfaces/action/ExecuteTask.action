@@ -1,0 +1,10 @@
+string command
+---
+bool success
+string summary
+int32 num_llm_calls
+int32 num_replans
+float64 duration_sec
+string log_path
+---
+string status_message

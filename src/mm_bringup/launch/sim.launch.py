@@ -83,18 +83,6 @@ def generate_launch_description():
         config_file=os.path.join(mm_bringup, 'config', 'gz_bridge.yaml'),
     )
 
-    # ── 5b. twist_stamper: Gazebo Teleop Twist → TwistStamped for controller ─
-    teleop_stamper = Node(
-        package='twist_stamper',
-        executable='twist_stamper',
-        parameters=[{'use_sim_time': True, 'frame_id': 'base_footprint'}],
-        remappings=[
-            ('/cmd_vel_in',  '/teleop_twist'),
-            ('/cmd_vel_out', '/diff_drive_controller/cmd_vel'),
-        ],
-        output='screen',
-    )
-
     # ── 6. Controller spawners ────────────────────────────────────────────────
     # gz_ros2_control plugin activates after the robot is loaded into Gazebo.
     # Give it 5 s, then spawn joint_state_broadcaster; spawn the rest after.
@@ -142,7 +130,6 @@ def generate_launch_description():
         rsp,
         spawn_robot,
         bridge,
-        teleop_stamper,
         spawn_controllers,
         start_after_jsb,
     ])

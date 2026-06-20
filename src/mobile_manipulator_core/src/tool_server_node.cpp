@@ -27,10 +27,11 @@
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
-#include <std_msgs/msg/bool.hpp>
+#include <std_msgs/msg/empty.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 #include <nav2_msgs/action/navigate_to_pose.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
+#include <geometry_msgs/msg/twist.hpp>
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2/LinearMath/Matrix3x3.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
@@ -38,6 +39,9 @@
 #include <tf2_ros/transform_listener.h>
 
 #include <moveit/move_group_interface/move_group_interface.hpp>
+#include <moveit/planning_scene_interface/planning_scene_interface.hpp>
+#include <moveit_msgs/msg/collision_object.hpp>
+#include <shape_msgs/msg/solid_primitive.hpp>
 
 #include "mm_interfaces/msg/detection_array.hpp"
 #include "mm_interfaces/srv/navigate_to.hpp"
@@ -49,6 +53,7 @@
 #include "mm_interfaces/srv/open_gripper.hpp"
 #include "mm_interfaces/srv/close_gripper.hpp"
 #include "mm_interfaces/srv/get_scene_state.hpp"
+#include "mm_interfaces/srv/drive_distance.hpp"
 
 using NavigateToPose = nav2_msgs::action::NavigateToPose;
 using GoalHandleNav  = rclcpp_action::ClientGoalHandle<NavigateToPose>;
@@ -81,9 +86,13 @@ public:
     // ── Grasp/release publishers (direct, one per known object) ────────────
     for (const auto& obj : {"red_cube", "green_cube", "blue_cube"}) {
       std::string s(obj);
-      grasp_pubs_[s]   = create_publisher<std_msgs::msg::Bool>("/grasp/"   + s, 1);
-      release_pubs_[s] = create_publisher<std_msgs::msg::Bool>("/release/" + s, 1);
+      grasp_pubs_[s]   = create_publisher<std_msgs::msg::Empty>("/grasp/"   + s, 1);
+      release_pubs_[s] = create_publisher<std_msgs::msg::Empty>("/release/" + s, 1);
     }
+
+    // /cmd_vel already flows to diff_drive_controller via nav2.launch.py's
+    // twist_stamper — drive_distance_cb reuses that same path.
+    cmd_vel_pub_ = create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 1);
 
     // ── Detection subscriber ────────────────────────────────────────────────
     detect_sub_ = create_subscription<mm_interfaces::msg::DetectionArray>(
@@ -127,6 +136,9 @@ public:
     state_srv_ = create_service<mm_interfaces::srv::GetSceneState>(
       "tool_server/get_state",
       std::bind(&ToolServer::state_cb, this, _1, _2));
+    drive_srv_ = create_service<mm_interfaces::srv::DriveDistance>(
+      "tool_server/drive_distance",
+      std::bind(&ToolServer::drive_distance_cb, this, _1, _2));
 
     // ── CSV log ────────────────────────────────────────────────────────────
     std::string log_path =
@@ -149,6 +161,71 @@ public:
     gripper_mgi_->setMaxVelocityScalingFactor(0.5);
     gripper_mgi_->setMaxAccelerationScalingFactor(0.5);
     RCLCPP_INFO(get_logger(), "MoveGroupInterface ready");
+
+    add_pick_table_collision_object();
+    release_all_cubes_at_startup();
+  }
+
+  // DetachableJoint's default state is ATTACHED at spawn, so without this
+  // all 3 cubes would be welded to the gripper from t=0 and fly through the
+  // air as soon as the robot moves.
+  void release_all_cubes_at_startup()
+  {
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));  // let bridge discover pubs
+    for (auto& [color, pub] : release_pubs_) {
+      pub->publish(std_msgs::msg::Empty());
+      RCLCPP_INFO(get_logger(), "Startup detach published for %s", color.c_str());
+    }
+  }
+
+  // Registers the pick_table (warehouse.sdf) as a MoveIt collision object so
+  // OMPL avoids routing the arm through/under it. Without this, position-only
+  // IK (orientation tolerance = π) is free to pick ANY joint configuration
+  // that reaches the target position — including ones where the elbow swings
+  // under the table, since the planner has no idea the table exists.
+  void add_pick_table_collision_object()
+  {
+    moveit::planning_interface::PlanningSceneInterface psi;
+
+    moveit_msgs::msg::CollisionObject table;
+    table.header.frame_id = "map";
+    table.id = "pick_table";
+
+    // Tabletop: world centre (2.05, 0, 0.36), size 0.12 x 0.60 x 0.04
+    shape_msgs::msg::SolidPrimitive top;
+    top.type = shape_msgs::msg::SolidPrimitive::BOX;
+    top.dimensions = {0.12, 0.60, 0.04};
+    geometry_msgs::msg::Pose top_pose;
+    top_pose.position.x = 2.05; top_pose.position.y = 0.0; top_pose.position.z = 0.36;
+    top_pose.orientation.w = 1.0;
+
+    // Front legs: world centres (2.10, ±0.25, 0.17), size 0.04 x 0.04 x 0.34
+    shape_msgs::msg::SolidPrimitive leg;
+    leg.type = shape_msgs::msg::SolidPrimitive::BOX;
+    leg.dimensions = {0.04, 0.04, 0.34};
+    geometry_msgs::msg::Pose leg_l_pose;
+    leg_l_pose.position.x = 2.10; leg_l_pose.position.y = 0.25; leg_l_pose.position.z = 0.17;
+    leg_l_pose.orientation.w = 1.0;
+    geometry_msgs::msg::Pose leg_r_pose = leg_l_pose;
+    leg_r_pose.position.y = -0.25;
+
+    table.primitives = {top, leg, leg};
+    table.primitive_poses = {top_pose, leg_l_pose, leg_r_pose};
+    table.operation = moveit_msgs::msg::CollisionObject::ADD;
+
+    // move_group's own TF buffer can take a few seconds to receive "map"
+    // after startup ("Unknown frame: map" + apply_planning_scene timeout
+    // observed otherwise) — retry instead of silently leaving the table
+    // unregistered, which would reopen the arm-hits-table risk.
+    for (int attempt = 1; attempt <= 5; ++attempt) {
+      if (psi.applyCollisionObject(table)) {
+        RCLCPP_INFO(get_logger(), "pick_table added to MoveIt planning scene");
+        return;
+      }
+      RCLCPP_WARN(get_logger(), "pick_table add attempt %d/5 failed, retrying...", attempt);
+      std::this_thread::sleep_for(std::chrono::seconds(2));
+    }
+    RCLCPP_ERROR(get_logger(), "Failed to add pick_table to planning scene after 5 attempts");
   }
 
 private:
@@ -317,8 +394,9 @@ private:
   }
 
   // ── Pick ─────────────────────────────────────────────────────────────────
-  // Uses real IK to the cube's detected 3-D position so that the pick can
-  // fail cleanly when the robot is not parked close enough.
+  // Real IK to the cube's detected position, descending from above (not a
+  // horizontal approach — that needs the gripper facing the cube, which
+  // position-only IK doesn't guarantee).
 
   void pick_cb(
     const mm_interfaces::srv::Pick::Request::SharedPtr req,
@@ -340,36 +418,73 @@ private:
       resp->message = "No detections available — call detect_objects first";
       log_call("pick", label, false, ms_since(t0)); return;
     }
-    double ox = 0.0, oy = 0.0, oz = 0.0;
+    double ox_map = 0.0, oy_map = 0.0, oz_map = 0.0;
     bool found = false;
     for (const auto& d : latest_detections_->detections) {
-      if (d.label == label) { ox = d.x; oy = d.y; oz = d.z; found = true; break; }
+      if (d.label == label) { ox_map = d.x; oy_map = d.y; oz_map = d.z; found = true; break; }
     }
     if (!found) {
       resp->success = false;
       resp->message = label + " not found in current detections";
       log_call("pick", label, false, ms_since(t0)); return;
     }
-    RCLCPP_INFO(get_logger(), "[pick] %s at map(%.3f, %.3f, %.3f)", label.c_str(), ox, oy, oz);
+    RCLCPP_INFO(get_logger(), "[pick] %s at map(%.3f, %.3f, %.3f)", label.c_str(), ox_map, oy_map, oz_map);
+
+    // Convert target to "odom" once: AMCL can drift the "map" frame mid-pick
+    // even while the robot sits still, so "map" targets go stale across the
+    // several arm moves below. "odom" stays consistent for that duration.
+    double ox = 0.0, oy = 0.0, oz = 0.0;  // odom-frame target (reused below)
+    {
+      geometry_msgs::msg::PoseStamped cube_map;
+      cube_map.header.frame_id = "map";
+      cube_map.header.stamp = rclcpp::Time(0);
+      cube_map.pose.position.x = ox_map;
+      cube_map.pose.position.y = oy_map;
+      cube_map.pose.position.z = oz_map;
+      cube_map.pose.orientation.w = 1.0;
+      try {
+        auto cube_odom = tf_buffer_->transform(cube_map, "odom", tf2::durationFromSec(0.5));
+        ox = cube_odom.pose.position.x;
+        oy = cube_odom.pose.position.y;
+        oz = cube_odom.pose.position.z;
+      } catch (const std::exception& e) {
+        resp->success = false;
+        resp->message = std::string("TF map->odom failed: ") + e.what();
+        log_call("pick", label, false, ms_since(t0)); return;
+      }
+    }
+    RCLCPP_INFO(get_logger(), "[pick] %s at odom(%.3f, %.3f, %.3f)", label.c_str(), ox, oy, oz);
 
     // 2. Open gripper before approaching
     gripper_mgi_->setNamedTarget("open");
     gripper_mgi_->move();
 
-    // Position-only IK: accept any gripper orientation so the solver has
-    // maximum freedom with this arm's complex SolidWorks joint frames.
+    // 3. Stage to "ready" — elevates the arm so the OMPL planner has a good
+    //    starting configuration and doesn't sweep links through the table
+    //    on the way to the pre-grasp pose.
+    arm_mgi_->setNamedTarget("ready");
+    if (arm_mgi_->move() != moveit::core::MoveItErrorCode::SUCCESS) {
+      resp->success = false;
+      resp->message = "Failed to reach ready staging pose";
+      log_call("pick", label, false, ms_since(t0)); return;
+    }
+
+    // Position-only IK: any gripper orientation is fine since the approach
+    // is vertical and the weld doesn't care which way the gripper faces.
     arm_mgi_->setGoalOrientationTolerance(M_PI);
-    arm_mgi_->setPoseReferenceFrame("map");
+    arm_mgi_->setGoalPositionTolerance(0.005);
+    arm_mgi_->setPoseReferenceFrame("odom");
 
     // Nominal approach orientation (may be overridden by solver since tolerance=π)
     tf2::Quaternion q_app;
     q_app.setRPY(0.0, M_PI / 2.0, 0.0);
 
-    // 3. Pre-grasp: 5 cm above the cube (small offset reduces total reach needed)
+    // 4. Pre-grasp: 10 cm ABOVE the cube. Table top is at z≈0.38 m, so
+    //    oz+0.10 (≈0.50 m) is well clear of it.
     geometry_msgs::msg::Pose pre_grasp;
     pre_grasp.position.x = ox;
     pre_grasp.position.y = oy;
-    pre_grasp.position.z = oz + 0.05;
+    pre_grasp.position.z = oz + 0.10;
     pre_grasp.orientation = tf2::toMsg(q_app);
     arm_mgi_->setPoseTarget(pre_grasp);
 
@@ -379,36 +494,93 @@ private:
       log_call("pick", label, false, ms_since(t0)); return;
     }
 
-    // 4. Descend to cube centre
+    // Lock in the orientation pre-grasp actually achieved (instead of
+    // re-opening full M_PI freedom for the descend) so the wrist doesn't
+    // jump to a different fold for this small move, and so we can correct
+    // for the finger offset below using a known orientation.
+    tf2::Quaternion q_locked = q_app;
+    try {
+      auto pg_tf = tf_buffer_->lookupTransform("odom", "gripper_actuator", tf2::TimePointZero);
+      tf2::fromMsg(pg_tf.transform.rotation, q_locked);
+    } catch (const std::exception& e) {
+      RCLCPP_WARN(get_logger(), "[pick] couldn't read pre-grasp orientation: %s", e.what());
+    }
+
+    // gripper_1 (joint6) and gripper_2 (joint7) attach to gripper_actuator at
+    // local (∓0.011, 0, 0.02344) — the midpoint between them, where the cube
+    // actually needs to be, is offset (0, 0, 0.02344) in gripper_actuator's
+    // own frame, not at its origin. Rotate that offset into world frame
+    // using the locked orientation so the IK target accounts for it.
+    tf2::Vector3 finger_offset_local(0.0, 0.0, 0.02344);
+    tf2::Vector3 finger_offset_world = tf2::quatRotate(q_locked, finger_offset_local);
+
+    // Descend so the FINGER MIDPOINT (not gripper_actuator's raw origin)
+    // lands just above the cube's TOP FACE (half-height 0.02m) — going to
+    // centre means the rigid gripper occupies the same space as the solid
+    // cube, shoving it aside before arriving.
+    constexpr double GRASP_STANDOFF = 0.03;
     geometry_msgs::msg::Pose grasp_pose = pre_grasp;
-    grasp_pose.position.z = oz;
+    grasp_pose.position.x = ox - finger_offset_world.x();
+    grasp_pose.position.y = oy - finger_offset_world.y();
+    grasp_pose.position.z = oz + GRASP_STANDOFF - finger_offset_world.z();
+    grasp_pose.orientation = tf2::toMsg(q_locked);
+    arm_mgi_->setGoalOrientationTolerance(0.2);  // hold the locked orientation closely
     arm_mgi_->setPoseTarget(grasp_pose);
 
     if (arm_mgi_->move() != moveit::core::MoveItErrorCode::SUCCESS) {
-      // Retreat before returning failure
+      arm_mgi_->setGoalOrientationTolerance(M_PI);
       arm_mgi_->setNamedTarget("home");
       arm_mgi_->move();
       resp->success = false;
-      resp->message = label + " grasp position unreachable (descent IK failed)";
+      resp->message = label + " grasp position unreachable";
       log_call("pick", label, false, ms_since(t0)); return;
     }
+    arm_mgi_->setGoalOrientationTolerance(M_PI);
 
-    // 5. Close gripper and weld the cube via DetachableJoint
+    // Proximity check: compare the actual FINGER MIDPOINT (gripper_actuator
+    // position + the same rotated offset) to the cube, not the raw actuator
+    // origin — GRASP_STANDOFF (3cm) + detection noise margin (~2cm).
+    constexpr double PROXIMITY_THRESHOLD = 0.05;
+    try {
+      auto tf = tf_buffer_->lookupTransform("odom", "gripper_actuator",
+                                            tf2::TimePointZero);
+      tf2::Quaternion q_actual;
+      tf2::fromMsg(tf.transform.rotation, q_actual);
+      tf2::Vector3 offset_world = tf2::quatRotate(q_actual, finger_offset_local);
+      double dx = tf.transform.translation.x + offset_world.x() - ox;
+      double dy = tf.transform.translation.y + offset_world.y() - oy;
+      double dz = tf.transform.translation.z + offset_world.z() - oz;
+      double dist = std::sqrt(dx*dx + dy*dy + dz*dz);
+      RCLCPP_INFO(get_logger(), "[pick] finger-midpoint→cube dist: %.3f m", dist);
+      if (dist > PROXIMITY_THRESHOLD) {
+        arm_mgi_->setNamedTarget("home");
+        arm_mgi_->move();
+        resp->success = false;
+        resp->message = label + ": gripper " + std::to_string(int(dist * 100))
+                        + " cm from cube (need ≤5 cm)";
+        log_call("pick", label, false, ms_since(t0)); return;
+      }
+    } catch (const std::exception& e) {
+      RCLCPP_WARN(get_logger(), "[pick] TF lookup failed: %s — proceeding", e.what());
+    }
+
+    // 7. Close gripper and weld the cube via DetachableJoint
     gripper_mgi_->setNamedTarget("closed");
     gripper_mgi_->move();
 
-    std_msgs::msg::Bool attach_msg;
-    attach_msg.data = true;
-    grasp_pubs_[label]->publish(attach_msg);
-    std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    grasp_pubs_[label]->publish(std_msgs::msg::Empty());
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
 
-    // 6. Lift 10 cm above cube (cube is now attached, so we always retract)
+    // 8. Lift 10 cm (straight up from grasp position; relative to
+    //    grasp_pose, which already has the finger-offset correction)
     geometry_msgs::msg::Pose lift_pose = grasp_pose;
-    lift_pose.position.z = oz + 0.10;
+    lift_pose.position.z = grasp_pose.position.z + 0.10;
+    arm_mgi_->setGoalOrientationTolerance(0.2);  // keep the locked orientation
     arm_mgi_->setPoseTarget(lift_pose);
     arm_mgi_->move();
+    arm_mgi_->setGoalOrientationTolerance(M_PI);
 
-    // 7. Carry at home (tucked position for navigation)
+    // 9. Carry at home (tucked position for navigation)
     arm_mgi_->setNamedTarget("home");
     arm_mgi_->move();
 
@@ -474,9 +646,7 @@ private:
     gripper_mgi_->setNamedTarget("open");
     gripper_mgi_->move();
 
-    std_msgs::msg::Bool release_msg;
-    release_msg.data = true;
-    release_pubs_[held_object_]->publish(release_msg);
+    release_pubs_[held_object_]->publish(std_msgs::msg::Empty());
     std::this_thread::sleep_for(std::chrono::milliseconds(250));
 
     std::string placed = held_object_;
@@ -587,6 +757,70 @@ private:
     resp->state_text = ss.str();
   }
 
+  // ── Drive a relative distance ───────────────────────────────────────────
+  // Blind, odometry-only straight-line nudge — NOT obstacle-aware (no
+  // costmap), unlike navigate_to. Capped to a short distance so a bad call
+  // can't drive the robot far into something. Use navigate_to for anything
+  // beyond a small local adjustment.
+  void drive_distance_cb(
+    const mm_interfaces::srv::DriveDistance::Request::SharedPtr req,
+    mm_interfaces::srv::DriveDistance::Response::SharedPtr resp)
+  {
+    auto t0 = std::chrono::steady_clock::now();
+    double distance_m = req->distance_m;
+    RCLCPP_INFO(get_logger(), "[drive_distance] distance_m=%.3f", distance_m);
+
+    constexpr double MAX_DISTANCE = 2.0;
+    if (std::abs(distance_m) > MAX_DISTANCE) {
+      resp->success = false;
+      resp->message = "distance_m magnitude exceeds " + std::to_string(MAX_DISTANCE)
+                      + " m cap; use navigate_to for longer moves";
+      log_call("drive_distance", std::to_string(distance_m), false, ms_since(t0)); return;
+    }
+
+    geometry_msgs::msg::TransformStamped start_tf;
+    try {
+      start_tf = tf_buffer_->lookupTransform("odom", "base_footprint", tf2::TimePointZero);
+    } catch (const std::exception& e) {
+      resp->success = false;
+      resp->message = std::string("TF lookup failed: ") + e.what();
+      log_call("drive_distance", std::to_string(distance_m), false, ms_since(t0)); return;
+    }
+    double sx = start_tf.transform.translation.x;
+    double sy = start_tf.transform.translation.y;
+
+    constexpr double SPEED = 0.15;  // m/s, conservative
+    double target_abs = std::abs(distance_m);
+    geometry_msgs::msg::Twist cmd;
+    cmd.linear.x = (distance_m >= 0.0 ? SPEED : -SPEED);
+
+    double timeout_s = target_abs / SPEED + 5.0;  // generous margin
+    rclcpp::Rate rate(20.0);
+    double traveled = 0.0;
+    while (rclcpp::ok()) {
+      cmd_vel_pub_->publish(cmd);
+      try {
+        auto cur_tf = tf_buffer_->lookupTransform("odom", "base_footprint", tf2::TimePointZero);
+        double dx = cur_tf.transform.translation.x - sx;
+        double dy = cur_tf.transform.translation.y - sy;
+        traveled = std::sqrt(dx*dx + dy*dy);
+      } catch (const std::exception&) { /* keep last known traveled, keep trying */ }
+
+      if (traveled >= target_abs) break;
+      if (ms_since(t0) > timeout_s * 1000.0) break;
+      rate.sleep();
+    }
+    cmd.linear.x = 0.0;
+    cmd_vel_pub_->publish(cmd);
+
+    bool ok = traveled >= target_abs * 0.9;  // 10% tolerance
+    resp->success = ok;
+    std::ostringstream msg;
+    msg << "Drove " << traveled << " m (" << distance_m << " requested)";
+    resp->message = msg.str();
+    log_call("drive_distance", std::to_string(distance_m), ok, ms_since(t0));
+  }
+
   // ── Utility ──────────────────────────────────────────────────────────────
 
   static long ms_since(const std::chrono::steady_clock::time_point& t0)
@@ -604,8 +838,9 @@ private:
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_sub_;
   rclcpp::Subscription<mm_interfaces::msg::DetectionArray>::SharedPtr detect_sub_;
 
-  std::map<std::string, rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr> grasp_pubs_;
-  std::map<std::string, rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr> release_pubs_;
+  std::map<std::string, rclcpp::Publisher<std_msgs::msg::Empty>::SharedPtr> grasp_pubs_;
+  std::map<std::string, rclcpp::Publisher<std_msgs::msg::Empty>::SharedPtr> release_pubs_;
+  rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
 
   rclcpp::Service<mm_interfaces::srv::NavigateTo>::SharedPtr     nav_srv_;
   rclcpp::Service<mm_interfaces::srv::DetectObjects>::SharedPtr  detect_srv_;
@@ -616,6 +851,7 @@ private:
   rclcpp::Service<mm_interfaces::srv::OpenGripper>::SharedPtr    open_srv_;
   rclcpp::Service<mm_interfaces::srv::CloseGripper>::SharedPtr   close_srv_;
   rclcpp::Service<mm_interfaces::srv::GetSceneState>::SharedPtr  state_srv_;
+  rclcpp::Service<mm_interfaces::srv::DriveDistance>::SharedPtr  drive_srv_;
 
   std::shared_ptr<moveit::planning_interface::MoveGroupInterface> arm_mgi_;
   std::shared_ptr<moveit::planning_interface::MoveGroupInterface> gripper_mgi_;

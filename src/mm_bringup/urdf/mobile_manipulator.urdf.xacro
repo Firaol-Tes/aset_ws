@@ -136,8 +136,25 @@
     </plugin>
   </gazebo>
 
-  <!-- DetachableJoint plugins for grasping are defined in warehouse.sdf
-       so they have world-level scope and can reference the spawned robot
-       model by name. -->
+  <!-- DetachableJoint plugins for grasping — one per cube colour. Must
+       live here, not in warehouse.sdf: parent_link only resolves within
+       the model the plugin is declared in, and the robot doesn't exist
+       yet when warehouse.sdf loads. -->
+  <xacro:macro name="grasp_joint" params="color">
+    <gazebo>
+      <plugin filename="gz-sim-detachable-joint-system"
+              name="gz::sim::systems::DetachableJoint">
+        <parent_link>gripper_actuator</parent_link>
+        <child_model>${color}_cube</child_model>
+        <child_link>link</child_link>
+        <attach_topic>/grasp/${color}_cube</attach_topic>
+        <detach_topic>/release/${color}_cube</detach_topic>
+      </plugin>
+    </gazebo>
+  </xacro:macro>
+
+  <xacro:grasp_joint color="red"/>
+  <xacro:grasp_joint color="green"/>
+  <xacro:grasp_joint color="blue"/>
 
 </robot>

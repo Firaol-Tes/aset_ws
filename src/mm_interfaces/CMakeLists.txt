@@ -5,6 +5,7 @@ find_package(ament_cmake REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(builtin_interfaces REQUIRED)
+find_package(action_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/Detection.msg"
@@ -18,7 +19,9 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/Place.srv"
   "srv/OpenGripper.srv"
   "srv/CloseGripper.srv"
-  DEPENDENCIES std_msgs builtin_interfaces
+  "srv/DriveDistance.srv"
+  "action/ExecuteTask.action"
+  DEPENDENCIES std_msgs builtin_interfaces action_msgs
 )
 
 ament_package()

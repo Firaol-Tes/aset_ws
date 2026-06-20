@@ -257,12 +257,16 @@
   </model>
 
   <!-- ═══════ coloured 4 cm cubes on the table ════════════════════════
-       DetachableJoint in each cube model: on /grasp/<color>_cube (Bool True)
-       the cube is rigidly attached to the robot's gripper_actuator link.
-       /release/<color>_cube (Bool True) detaches it. -->
+       DetachableJoint grasp plugins live in mobile_manipulator.urdf.xacro,
+       not here (parent_link=gripper_actuator must resolve in the robot's
+       own spawned model). -->
 
   <model name="red_cube">
-    <pose>2.0 0.05 0.40 0 0 0</pose>
+    <!-- y=±0.12: this is a marginal reach case (table collision object
+         constrains feasible IK near here) — has succeeded and failed on
+         different runs depending on exact robot parking pose. 0.12 is the
+         spacing from the confirmed first successful end-to-end pick. -->
+    <pose>2.0 0.12 0.40 0 0 0</pose>
     <link name="link">
       <collision name="col">
         <geometry><box><size>0.04 0.04 0.04</size></box></geometry>
@@ -282,13 +286,6 @@
         </inertia>
       </inertial>
     </link>
-    <plugin filename="gz-sim-detachable-joint-system"
-            name="gz::sim::systems::DetachableJoint">
-      <parent_link>mobile_manipulator::gripper_actuator</parent_link>
-      <child_link>link</child_link>
-      <topic>/grasp/red_cube</topic>
-      <detach_topic>/release/red_cube</detach_topic>
-    </plugin>
   </model>
 
   <model name="green_cube">
@@ -311,17 +308,10 @@
         </inertia>
       </inertial>
     </link>
-    <plugin filename="gz-sim-detachable-joint-system"
-            name="gz::sim::systems::DetachableJoint">
-      <parent_link>mobile_manipulator::gripper_actuator</parent_link>
-      <child_link>link</child_link>
-      <topic>/grasp/green_cube</topic>
-      <detach_topic>/release/green_cube</detach_topic>
-    </plugin>
   </model>
 
   <model name="blue_cube">
-    <pose>2.0 -0.05 0.40 0 0 0</pose>
+    <pose>2.0 -0.12 0.40 0 0 0</pose>
     <link name="link">
       <collision name="col">
         <geometry><box><size>0.04 0.04 0.04</size></box></geometry>
@@ -340,13 +330,6 @@
         </inertia>
       </inertial>
     </link>
-    <plugin filename="gz-sim-detachable-joint-system"
-            name="gz::sim::systems::DetachableJoint">
-      <parent_link>mobile_manipulator::gripper_actuator</parent_link>
-      <child_link>link</child_link>
-      <topic>/grasp/blue_cube</topic>
-      <detach_topic>/release/blue_cube</detach_topic>
-    </plugin>
   </model>
 
   <!-- ═══════ perimeter walls (give LiDAR closed boundaries for SLAM) ═══ -->
