@@ -20,6 +20,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/OpenGripper.srv"
   "srv/CloseGripper.srv"
   "srv/DriveDistance.srv"
+  "srv/PickAtPose.srv"
   "action/ExecuteTask.action"
   DEPENDENCIES std_msgs builtin_interfaces action_msgs
 )

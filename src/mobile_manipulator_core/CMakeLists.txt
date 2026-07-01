@@ -96,12 +96,40 @@ ament_target_dependencies(tool_test
   mm_interfaces
 )
 
+# ── baseline_controller ──────────────────────────────────────────────────────
+add_executable(baseline_controller src/baseline_controller.cpp)
+target_include_directories(baseline_controller PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+target_compile_features(baseline_controller PUBLIC cxx_std_17)
+ament_target_dependencies(baseline_controller
+  rclcpp
+  mm_interfaces
+)
+
+# ── experiment_runner ────────────────────────────────────────────────────────
+add_executable(experiment_runner src/experiment_runner.cpp src/gz_teleport.cpp)
+target_include_directories(experiment_runner PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+target_compile_features(experiment_runner PUBLIC cxx_std_17)
+ament_target_dependencies(experiment_runner
+  rclcpp
+  rclcpp_action
+  std_msgs
+  nav_msgs
+  mm_interfaces
+)
+target_link_libraries(experiment_runner yaml-cpp)
+
 install(TARGETS
     moveit_smoke_test
     grasp_server
     state_manager_node
     tool_server_node
     tool_test
+    baseline_controller
+    experiment_runner
   DESTINATION lib/${PROJECT_NAME})
 
 install(DIRECTORY launch config

@@ -1,0 +1,85 @@
+# Phase 6 experiment scenarios, read by experiment_runner.
+#
+# All 3 cubes are always physically present in warehouse.sdf -- "S2: 3 cubes
+# present" doesn't need separate world setup, it's already the case. What
+# differs per scenario is the natural-language command (which only the LLM
+# system actually interprets -- baseline always runs the same fixed S1-style
+# sequence regardless of which scenario it's run under, since it has no
+# language understanding. Running baseline on S2/S3/S5 is expected to
+# produce a degenerate/uninformative result -- that limitation IS the point
+# of the comparison, not a bug to engineer around).
+#
+# success_criteria is descriptive, not machine-checked: success(bool) in the
+# experiment CSV is self-reported by the system under test (the LLM's own
+# task_complete(success=...), or baseline_controller's last-step result) --
+# same criterion already used and validated in Phase 5/6 Part 1.
+
+scenarios:
+  S1:
+    description: "Basic pick-and-deliver, no disturbance"
+    # Must name the colour explicitly: all 3 cubes are always present in the
+    # world, so "the cube" with no colour is genuinely ambiguous to the LLM
+    # -- confirmed by it picking green_cube on a live S4 run. S1/S4 are
+    # about basic delivery/disturbance-recovery, not colour grounding
+    # (that's S2's job), so removing the ambiguity here is correct, not a
+    # simplification of what's being tested.
+    command: "take the red cube to dispatch"
+    success_criteria: "red_cube delivered to dispatch_zone"
+    disturbance:
+      enabled: false
+
+  S2:
+    description: "Perception grounding -- 3 cubes present, must pick the correct one"
+    command: "bring the red cube to dispatch"
+    success_criteria: "red_cube (not green or blue) delivered to dispatch_zone"
+    disturbance:
+      enabled: false
+
+  S3:
+    description: "Multi-step sequential planning -- move red then green cube in order"
+    command: "move the red cube to dispatch, then the green cube"
+    success_criteria: "red_cube delivered to dispatch_zone before green_cube, both delivered"
+    disturbance:
+      enabled: false
+
+  S4:
+    description: "S1 + mid-task disturbance -- key experiment: cube moved after the robot starts navigating to it"
+    command: "take the red cube to dispatch"
+    success_criteria: "red_cube delivered to dispatch_zone despite being moved mid-task"
+    disturbance:
+      enabled: true
+      target_object: red_cube
+      # Fired this many seconds after navigate_to(table) is issued -- a
+      # fixed delay rather than a live distance/odometry threshold (the
+      # delay alternative is explicitly allowed by the original spec, and
+      # is much simpler than monitoring odometry concurrently with an async
+      # navigate_to call). Every navigate_to observed in this project so far
+      # takes well over 5s end to end, so this reliably fires mid-navigation.
+      delay_sec: 5.0
+      # Must stay within the tabletop's actual collision bounds (centre
+      # 2.05, 0, 0.36, size 0.12 x 0.60 x 0.04 -- see tool_server_node.cpp's
+      # pick_table collision object) or the cube falls off the table under
+      # gravity after the teleport instead of landing where placed (this
+      # was confirmed empirically -- a teleport only sets the instantaneous
+      # pose, physics resumes immediately after).
+      #
+      # y=-0.20 (originally chosen, near the table's far edge) caused a real
+      # LLM trial to correctly detect the disturbance and attempt to pick at
+      # the new location, but the pick itself failed with GOAL_STATE_INVALID
+      # ("Unable to sample any valid states for goal tree") -- i.e. -0.20 is
+      # ANOTHER marginal-reach position, same class of issue red_cube's
+      # original y=0.12 spawn had (which needed the calibrated
+      # APPROACH_NUDGE_M in baseline_controller.cpp to be reachable at all).
+      # Moved to y=-0.06: still a clear ~18cm shift from the spawn y=0.12
+      # (a real, meaningful disturbance), but central rather than
+      # edge-adjacent, so it isn't ALSO testing raw IK-reachability luck on
+      # top of the perception/replanning behaviour this scenario is actually
+      # meant to isolate.
+      new_position: {x: 2.0, y: -0.06, z: 0.40}
+
+  S5:
+    description: "Ambiguous goal -- no fixed target, system decides what 'tidy up' means"
+    command: "tidy up the warehouse"
+    success_criteria: "subjective -- record what the system actually did; no fixed pass/fail target"
+    disturbance:
+      enabled: false

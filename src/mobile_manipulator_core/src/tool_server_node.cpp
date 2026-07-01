@@ -54,6 +54,7 @@
 #include "mm_interfaces/srv/close_gripper.hpp"
 #include "mm_interfaces/srv/get_scene_state.hpp"
 #include "mm_interfaces/srv/drive_distance.hpp"
+#include <nav2_msgs/srv/clear_entire_costmap.hpp>
 
 using NavigateToPose = nav2_msgs::action::NavigateToPose;
 using GoalHandleNav  = rclcpp_action::ClientGoalHandle<NavigateToPose>;
@@ -93,6 +94,9 @@ public:
     // /cmd_vel already flows to diff_drive_controller via nav2.launch.py's
     // twist_stamper — drive_distance_cb reuses that same path.
     cmd_vel_pub_ = create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 1);
+
+    clear_costmap_client_ = create_client<nav2_msgs::srv::ClearEntireCostmap>(
+      "/local_costmap/clear_entirely_local_costmap");
 
     // ── Detection subscriber ────────────────────────────────────────────────
     detect_sub_ = create_subscription<mm_interfaces::msg::DetectionArray>(
@@ -171,61 +175,57 @@ public:
   // air as soon as the robot moves.
   void release_all_cubes_at_startup()
   {
-    std::this_thread::sleep_for(std::chrono::milliseconds(1000));  // let bridge discover pubs
+    std::this_thread::sleep_for(std::chrono::milliseconds(3000));  // let bridge discover pubs
     for (auto& [color, pub] : release_pubs_) {
       pub->publish(std_msgs::msg::Empty());
       RCLCPP_INFO(get_logger(), "Startup detach published for %s", color.c_str());
     }
   }
 
-  // Registers the pick_table (warehouse.sdf) as a MoveIt collision object so
-  // OMPL avoids routing the arm through/under it. Without this, position-only
-  // IK (orientation tolerance = π) is free to pick ANY joint configuration
-  // that reaches the target position — including ones where the elbow swings
-  // under the table, since the planner has no idea the table exists.
+  // Registers the pick_table as a MoveIt collision object.
+  // Called both at startup and at the start of every pick so the object is
+  // always fresh even if move_group was slow to start.
+  // Frame is "odom" (the planning frame) to avoid any TF conversion overhead.
   void add_pick_table_collision_object()
   {
     moveit::planning_interface::PlanningSceneInterface psi;
 
     moveit_msgs::msg::CollisionObject table;
-    table.header.frame_id = "map";
+    table.header.frame_id = "odom";
     table.id = "pick_table";
 
-    // Tabletop: world centre (2.05, 0, 0.36), size 0.12 x 0.60 x 0.04
-    shape_msgs::msg::SolidPrimitive top;
-    top.type = shape_msgs::msg::SolidPrimitive::BOX;
-    top.dimensions = {0.12, 0.60, 0.04};
-    geometry_msgs::msg::Pose top_pose;
-    top_pose.position.x = 2.05; top_pose.position.y = 0.0; top_pose.position.z = 0.36;
-    top_pose.orientation.w = 1.0;
+    auto box = [](double x, double y, double z) {
+      shape_msgs::msg::SolidPrimitive p;
+      p.type = shape_msgs::msg::SolidPrimitive::BOX;
+      p.dimensions = {x, y, z};
+      return p;
+    };
+    auto pose = [](double x, double y, double z) {
+      geometry_msgs::msg::Pose p;
+      p.position.x = x; p.position.y = y; p.position.z = z;
+      p.orientation.w = 1.0;
+      return p;
+    };
 
-    // Front legs: world centres (2.10, ±0.25, 0.17), size 0.04 x 0.04 x 0.34
-    shape_msgs::msg::SolidPrimitive leg;
-    leg.type = shape_msgs::msg::SolidPrimitive::BOX;
-    leg.dimensions = {0.04, 0.04, 0.34};
-    geometry_msgs::msg::Pose leg_l_pose;
-    leg_l_pose.position.x = 2.10; leg_l_pose.position.y = 0.25; leg_l_pose.position.z = 0.17;
-    leg_l_pose.orientation.w = 1.0;
-    geometry_msgs::msg::Pose leg_r_pose = leg_l_pose;
-    leg_r_pose.position.y = -0.25;
-
-    table.primitives = {top, leg, leg};
-    table.primitive_poses = {top_pose, leg_l_pose, leg_r_pose};
+    // Tabletop: centre (2.05, 0, 0.36), 12 cm deep × 64 cm wide × 4 cm thick
+    // Table body: solid block filling the under-tabletop space (x:1.99-2.11,
+    //   z:0-0.34).  Blocks OMPL from routing arm links UNDER the table without
+    //   extending into the robot's approach corridor (x < 1.99).
+    table.primitives   = { box(0.12, 0.64, 0.04),   // tabletop
+                           box(0.12, 0.64, 0.34) };  // table body (under-table)
+    table.primitive_poses = { pose(2.05, 0.0, 0.36),
+                              pose(2.05, 0.0, 0.17) };
     table.operation = moveit_msgs::msg::CollisionObject::ADD;
 
-    // move_group's own TF buffer can take a few seconds to receive "map"
-    // after startup ("Unknown frame: map" + apply_planning_scene timeout
-    // observed otherwise) — retry instead of silently leaving the table
-    // unregistered, which would reopen the arm-hits-table risk.
     for (int attempt = 1; attempt <= 5; ++attempt) {
       if (psi.applyCollisionObject(table)) {
-        RCLCPP_INFO(get_logger(), "pick_table added to MoveIt planning scene");
+        RCLCPP_INFO(get_logger(), "pick_table collision object applied");
         return;
       }
-      RCLCPP_WARN(get_logger(), "pick_table add attempt %d/5 failed, retrying...", attempt);
+      RCLCPP_WARN(get_logger(), "pick_table apply attempt %d/5 failed, retrying...", attempt);
       std::this_thread::sleep_for(std::chrono::seconds(2));
     }
-    RCLCPP_ERROR(get_logger(), "Failed to add pick_table to planning scene after 5 attempts");
+    RCLCPP_ERROR(get_logger(), "Failed to apply pick_table collision object after 5 attempts");
   }
 
 private:
@@ -455,6 +455,11 @@ private:
     }
     RCLCPP_INFO(get_logger(), "[pick] %s at odom(%.3f, %.3f, %.3f)", label.c_str(), ox, oy, oz);
 
+    // Ensure the table collision object is in the MoveIt planning scene before
+    // any OMPL call.  Doing it here (not just at startup) guards against
+    // move_group being slow to start and the startup registration failing.
+    add_pick_table_collision_object();
+
     // 2. Open gripper before approaching
     gripper_mgi_->setNamedTarget("open");
     gripper_mgi_->move();
@@ -514,11 +519,10 @@ private:
     tf2::Vector3 finger_offset_local(0.0, 0.0, 0.02344);
     tf2::Vector3 finger_offset_world = tf2::quatRotate(q_locked, finger_offset_local);
 
-    // Descend so the FINGER MIDPOINT (not gripper_actuator's raw origin)
-    // lands just above the cube's TOP FACE (half-height 0.02m) — going to
-    // centre means the rigid gripper occupies the same space as the solid
-    // cube, shoving it aside before arriving.
-    constexpr double GRASP_STANDOFF = 0.03;
+    // Hover finger midpoint 5 cm above cube centre (= 3 cm above cube top face).
+    // Keeping the gripper CLEAR of the table surface prevents DART from seeing
+    // a DetachableJoint↔table-contact constraint conflict on the lift stroke.
+    constexpr double GRASP_STANDOFF = 0.05;
     geometry_msgs::msg::Pose grasp_pose = pre_grasp;
     grasp_pose.position.x = ox - finger_offset_world.x();
     grasp_pose.position.y = oy - finger_offset_world.y();
@@ -537,10 +541,8 @@ private:
     }
     arm_mgi_->setGoalOrientationTolerance(M_PI);
 
-    // Proximity check: compare the actual FINGER MIDPOINT (gripper_actuator
-    // position + the same rotated offset) to the cube, not the raw actuator
-    // origin — GRASP_STANDOFF (3cm) + detection noise margin (~2cm).
-    constexpr double PROXIMITY_THRESHOLD = 0.05;
+    // Proximity check: GRASP_STANDOFF (5cm) + detection noise margin (~2cm).
+    constexpr double PROXIMITY_THRESHOLD = 0.08;
     try {
       auto tf = tf_buffer_->lookupTransform("odom", "gripper_actuator",
                                             tf2::TimePointZero);
@@ -564,12 +566,17 @@ private:
       RCLCPP_WARN(get_logger(), "[pick] TF lookup failed: %s — proceeding", e.what());
     }
 
-    // 7. Close gripper and weld the cube via DetachableJoint
+    // 7. Close gripper, then weld cube via DetachableJoint.
+    //    Publish the attach message TWICE (belt+suspenders: ROS-Gz bridge can
+    //    drop the first if Gazebo transport isn't ready) and sleep 1500 ms so
+    //    the DART physics step creates the fixed joint before the lift begins.
     gripper_mgi_->setNamedTarget("closed");
     gripper_mgi_->move();
 
     grasp_pubs_[label]->publish(std_msgs::msg::Empty());
-    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    grasp_pubs_[label]->publish(std_msgs::msg::Empty());
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
     // 8. Lift 10 cm (straight up from grasp position; relative to
     //    grasp_pose, which already has the finger-offset correction)
@@ -580,9 +587,17 @@ private:
     arm_mgi_->move();
     arm_mgi_->setGoalOrientationTolerance(M_PI);
 
-    // 9. Carry at home (tucked position for navigation)
+    // 9. Tuck arm to home slowly — low velocity = small reaction force on base.
+    arm_mgi_->setMaxVelocityScalingFactor(0.25);
     arm_mgi_->setNamedTarget("home");
     arm_mgi_->move();
+    arm_mgi_->setMaxVelocityScalingFactor(1.0);
+
+    // 10. Now drive back — arm safely tucked, no pull effect.
+    drive_back(2.5);
+
+    face_yaw(M_PI);   // face -x = toward dispatch
+    clear_local_costmap();
 
     held_object_ = label;
     resp->success = true;
@@ -655,6 +670,13 @@ private:
     // 3. Retract arm to home
     arm_mgi_->setNamedTarget("home");
     arm_mgi_->move();
+
+    // Back away from dispatch wall, then face the table so Nav2 can drive
+    // forward without swinging backward into the wall.
+    if (req->location_name == "dispatch_zone") {
+      drive_back(1.0);
+      face_yaw(0.0);  // now facing +x = toward table
+    }
 
     resp->success = true;
     resp->message = "Placed " + placed + " at " + req->location_name
@@ -823,6 +845,104 @@ private:
 
   // ── Utility ──────────────────────────────────────────────────────────────
 
+  void clear_local_costmap()
+  {
+    if (!clear_costmap_client_->wait_for_service(std::chrono::seconds(1))) {
+      RCLCPP_WARN(get_logger(), "[clear_costmap] service not available");
+      return;
+    }
+    auto req = std::make_shared<nav2_msgs::srv::ClearEntireCostmap::Request>();
+    auto fut = clear_costmap_client_->async_send_request(req);
+    if (fut.wait_for(std::chrono::seconds(3)) == std::future_status::ready) {
+      RCLCPP_INFO(get_logger(), "[clear_costmap] local costmap cleared");
+    }
+  }
+
+  void drive_back(double meters)
+  {
+    constexpr double SPEED = 0.25;
+    geometry_msgs::msg::TransformStamped start_tf;
+    try {
+      start_tf = tf_buffer_->lookupTransform("odom", "base_footprint", tf2::TimePointZero);
+    } catch (const std::exception& e) {
+      RCLCPP_WARN(get_logger(), "[drive_back] TF failed: %s", e.what());
+      return;
+    }
+    double sx = start_tf.transform.translation.x;
+    double sy = start_tf.transform.translation.y;
+
+    // Backward direction unit vector (robot's -x in odom frame at start).
+    tf2::Quaternion qstart(
+      start_tf.transform.rotation.x, start_tf.transform.rotation.y,
+      start_tf.transform.rotation.z, start_tf.transform.rotation.w);
+    double roll, pitch, yaw0;
+    tf2::Matrix3x3(qstart).getRPY(roll, pitch, yaw0);
+    double bx = -std::cos(yaw0);   // backward unit vector
+    double by = -std::sin(yaw0);
+
+    geometry_msgs::msg::Twist cmd;
+    cmd.linear.x = -SPEED;
+    double timeout_s = meters / SPEED + 5.0;
+    rclcpp::Rate rate(20.0);
+    auto t0 = std::chrono::steady_clock::now();
+    double traveled = 0.0;
+    while (rclcpp::ok()) {
+      cmd_vel_pub_->publish(cmd);
+      try {
+        auto cur = tf_buffer_->lookupTransform("odom", "base_footprint", tf2::TimePointZero);
+        double dx = cur.transform.translation.x - sx;
+        double dy = cur.transform.translation.y - sy;
+        // Signed projection: negative means robot went forward (wrong way).
+        traveled = dx * bx + dy * by;
+      } catch (const std::exception&) {}
+      if (traveled >= meters) break;
+      if (ms_since(t0) > timeout_s * 1000.0) break;
+      rate.sleep();
+    }
+    cmd.linear.x = 0.0;
+    cmd_vel_pub_->publish(cmd);
+    RCLCPP_INFO(get_logger(), "[drive_back] backed up %.2f m (signed)", traveled);
+  }
+
+  // Spin in place until robot faces target_yaw (radians, in odom frame).
+  void face_yaw(double target_yaw)
+  {
+    constexpr double W_SPEED  = 0.5;   // rad/s
+    constexpr double TOL      = 0.05;  // ~3 degrees
+    constexpr double TIMEOUT_MS = 15000.0;
+
+    rclcpp::Rate rate(20.0);
+    auto t0 = std::chrono::steady_clock::now();
+    geometry_msgs::msg::Twist cmd;
+
+    while (rclcpp::ok() && ms_since(t0) < TIMEOUT_MS) {
+      geometry_msgs::msg::TransformStamped tf;
+      try {
+        tf = tf_buffer_->lookupTransform("odom", "base_footprint", tf2::TimePointZero);
+      } catch (const std::exception &) {
+        rate.sleep();
+        continue;
+      }
+      tf2::Quaternion q(tf.transform.rotation.x, tf.transform.rotation.y,
+                        tf.transform.rotation.z, tf.transform.rotation.w);
+      double roll, pitch, yaw;
+      tf2::Matrix3x3(q).getRPY(roll, pitch, yaw);
+
+      double err = target_yaw - yaw;
+      while (err >  M_PI) err -= 2.0 * M_PI;
+      while (err < -M_PI) err += 2.0 * M_PI;
+
+      if (std::abs(err) < TOL) break;
+      cmd.angular.z = (err > 0 ? 1.0 : -1.0) * W_SPEED;
+      cmd.linear.x  = 0.0;
+      cmd_vel_pub_->publish(cmd);
+      rate.sleep();
+    }
+    cmd.angular.z = 0.0;
+    cmd_vel_pub_->publish(cmd);
+    RCLCPP_INFO(get_logger(), "[face_yaw] now facing %.2f rad", target_yaw);
+  }
+
   static long ms_since(const std::chrono::steady_clock::time_point& t0)
   {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -852,6 +972,7 @@ private:
   rclcpp::Service<mm_interfaces::srv::CloseGripper>::SharedPtr   close_srv_;
   rclcpp::Service<mm_interfaces::srv::GetSceneState>::SharedPtr  state_srv_;
   rclcpp::Service<mm_interfaces::srv::DriveDistance>::SharedPtr  drive_srv_;
+  rclcpp::Client<nav2_msgs::srv::ClearEntireCostmap>::SharedPtr clear_costmap_client_;
 
   std::shared_ptr<moveit::planning_interface::MoveGroupInterface> arm_mgi_;
   std::shared_ptr<moveit::planning_interface::MoveGroupInterface> gripper_mgi_;

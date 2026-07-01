@@ -32,9 +32,9 @@ class PlannerNode(Node):
     def __init__(self):
         super().__init__('planner_node')
 
-        self.declare_parameter('provider', 'gemini')
-        self.declare_parameter('model', 'gemini-3.5-flash')
-        self.declare_parameter('max_turns', 25)
+        self.declare_parameter('provider', 'anthropic')
+        self.declare_parameter('model', 'claude-haiku-4-5-20251001')
+        self.declare_parameter('max_turns', 50)
         self.declare_parameter('tool_timeout_sec', 200.0)
         self.declare_parameter('log_dir', '~/aset_ws/llm_task_logs')
         self.declare_parameter('system_prompt_path', '')

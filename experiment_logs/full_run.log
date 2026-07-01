@@ -1,0 +1,26 @@
+
+==========================================
+  Mon 22 Jun 2026 04:31:35 PM +04: Starting S1 llm x10
+==========================================
+[INFO] [1782131496.219424926] [experiment_runner]: === EXPERIMENT RUNNER: S1 system=llm trials=10 ===
+[INFO] [1782131496.219558318] [experiment_runner]: Command: 'take the red cube to dispatch'  disturbance=off
+[INFO] [1782131496.219573898] [experiment_runner]: Waiting for tool_server services...
+[INFO] [1782131811.078052117] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[INFO] [1782131811.078296274] [experiment_runner]: Tool services ready.
+
+>>> [rcutils|error_handling.c:108] rcutils_set_error_state()
+This error state is being overwritten:
+
+  'rcl node's context is invalid, at ./src/rcl/node.c:404'
+
+with this new error message:
+
+  'publisher's context is invalid, at ./src/rcl/publisher.c:423'
+
+rcutils_reset_error() should be called after error handling to avoid this.
+<<<
+Failed to publish log message to rosout: publisher's context is invalid, at ./src/rcl/publisher.c:423
+[INFO] [1782131811.078389302] [experiment_runner]: --- Trial 1/10: resetting world ---
+Failed to publish log message to rosout: publisher's context is invalid, at ./src/rcl/publisher.c:423
+[INFO] [1782131811.078432134] [experiment_runner]: [reset] Releasing any held object, opening gripper...
+Failed to publish log message to rosout: publisher's context is invalid, at ./src/rcl/publisher.c:423

@@ -64,6 +64,7 @@
     <parent link="chassis_link"/>
     <child  link="left_wheel_link"/>
     <axis xyz="0 0 1"/>
+    <dynamics damping="2.0" friction="0.5"/>
   </joint>
   <link name="left_wheel_link">
     <visual>
@@ -91,6 +92,7 @@
     <parent link="chassis_link"/>
     <child  link="right_wheel_link"/>
     <axis xyz="0 0 1"/>
+    <dynamics damping="2.0" friction="0.5"/>
   </joint>
   <link name="right_wheel_link">
     <visual>

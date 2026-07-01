@@ -1,20 +1,15 @@
 """
-nav2.launch.py — Nav2 navigation stack with real-time SLAM localisation.
+nav2.launch.py — Nav2 with a pre-saved static map (no SLAM).
 
-Uses slam_toolbox (not AMCL) to provide the map frame so the saved map
-quality doesn't matter.  Drive the robot a little first to let SLAM build
-enough of the map, then send Nav2 Goals.
+map_server serves the warehouse map; a static map→odom TF keeps the robot
+at its spawn position (origin).  The map never distorts regardless of what
+the arm or gripper does.
 
 Prerequisites:
   • sim.launch.py running (all 4 controllers active)
 
 Usage:
   ros2 launch mm_bringup nav2.launch.py
-
-In RViz:
-  1. Wait ~5 s for SLAM to activate and start building the map.
-  2. Use the "Nav2 Goal" tool to click a goal on the map.
-     The robot will plan a path and drive there automatically.
 """
 
 import os
@@ -31,33 +26,43 @@ def generate_launch_description():
     mm_bringup   = get_package_share_directory('mm_bringup')
     nav2_bringup = get_package_share_directory('nav2_bringup')
 
-    slam_params  = os.path.join(mm_bringup, 'config', 'slam_toolbox_params.yaml')
-    nav2_params  = os.path.join(mm_bringup, 'config', 'nav2_params.yaml')
+    nav2_params = os.path.join(mm_bringup, 'config', 'nav2_params.yaml')
+    map_yaml    = '/home/f/aset_ws/maps/warehouse_map.yaml'
 
-    # ── 1. slam_toolbox: real-time SLAM → provides /map + map→odom TF ───────
-    slam_node = Node(
-        package='slam_toolbox',
-        executable='async_slam_toolbox_node',
-        name='slam_toolbox',
+    # ── 1. Static TF: map → odom (identity — robot spawns at origin) ─────────
+    map_odom_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        arguments=['0', '0', '0', '0', '0', '0', 'map', 'odom'],
+        parameters=[{'use_sim_time': True}],
         output='screen',
-        parameters=[slam_params, {'use_sim_time': True}],
     )
 
-    # async_slam_toolbox_node is a lifecycle node — must be activated.
-    slam_lifecycle = Node(
+    # ── 2. map_server — publishes /map from the saved warehouse map ───────────
+    map_server = Node(
+        package='nav2_map_server',
+        executable='map_server',
+        name='map_server',
+        output='screen',
+        parameters=[
+            {'use_sim_time': True},
+            {'yaml_filename': map_yaml},
+        ],
+    )
+
+    map_lifecycle = Node(
         package='nav2_lifecycle_manager',
         executable='lifecycle_manager',
-        name='lifecycle_manager_slam',
+        name='lifecycle_manager_map',
         output='screen',
         parameters=[{
             'use_sim_time': True,
             'autostart': True,
-            'node_names': ['slam_toolbox'],
-            'bond_timeout': 0.0,   # slam_toolbox doesn't implement bond
+            'node_names': ['map_server'],
         }],
     )
 
-    # ── 2. Nav2 navigation stack (planner + controller, no AMCL) ────────────
+    # ── 3. Nav2 navigation stack (planner + controller, no AMCL) ────────────
     nav2 = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(nav2_bringup, 'launch', 'navigation_launch.py')
@@ -69,7 +74,7 @@ def generate_launch_description():
         }.items(),
     )
 
-    # ── 3. twist_stamper: Nav2 Twist /cmd_vel → TwistStamped controller ─────
+    # ── 4. twist_stamper: Nav2 Twist /cmd_vel → TwistStamped controller ──────
     twist_stamper = Node(
         package='twist_stamper',
         executable='twist_stamper',
@@ -81,7 +86,7 @@ def generate_launch_description():
         output='screen',
     )
 
-    # ── 4. RViz ──────────────────────────────────────────────────────────────
+    # ── 5. RViz ───────────────────────────────────────────────────────────────
     rviz_config = os.path.join(nav2_bringup, 'rviz', 'nav2_default_view.rviz')
     rviz = Node(
         package='rviz2',
@@ -92,8 +97,9 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
-        slam_node,
-        slam_lifecycle,
+        map_odom_tf,
+        map_server,
+        map_lifecycle,
         nav2,
         twist_stamper,
         rviz,
