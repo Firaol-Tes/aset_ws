@@ -54,6 +54,7 @@
 #include "mm_interfaces/srv/close_gripper.hpp"
 #include "mm_interfaces/srv/get_scene_state.hpp"
 #include "mm_interfaces/srv/drive_distance.hpp"
+#include "mm_interfaces/srv/pick_at_pose.hpp"
 #include <nav2_msgs/srv/clear_entire_costmap.hpp>
 
 using NavigateToPose = nav2_msgs::action::NavigateToPose;
@@ -143,6 +144,9 @@ public:
     drive_srv_ = create_service<mm_interfaces::srv::DriveDistance>(
       "tool_server/drive_distance",
       std::bind(&ToolServer::drive_distance_cb, this, _1, _2));
+    pick_at_pose_srv_ = create_service<mm_interfaces::srv::PickAtPose>(
+      "tool_server/pick_at_pose",
+      std::bind(&ToolServer::pick_at_pose_cb, this, _1, _2));
 
     // ── CSV log ────────────────────────────────────────────────────────────
     std::string log_path =
@@ -588,7 +592,7 @@ private:
     arm_mgi_->setGoalOrientationTolerance(M_PI);
 
     // 9. Tuck arm to home slowly — low velocity = small reaction force on base.
-    arm_mgi_->setMaxVelocityScalingFactor(0.25);
+    arm_mgi_->setMaxVelocityScalingFactor(0.50);
     arm_mgi_->setNamedTarget("home");
     arm_mgi_->move();
     arm_mgi_->setMaxVelocityScalingFactor(1.0);
@@ -604,6 +608,58 @@ private:
     resp->message = "Picked " + label;
     log_call("pick", label, true, ms_since(t0));
     RCLCPP_INFO(get_logger(), "[pick] %s", resp->message.c_str());
+  }
+
+  // pick_at_pose: identical to pick_cb but takes x/y/z directly in odom frame
+  // (bypasses live perception — used by baseline_controller for hardcoded positions).
+  void pick_at_pose_cb(
+    const std::shared_ptr<mm_interfaces::srv::PickAtPose::Request> req,
+    std::shared_ptr<mm_interfaces::srv::PickAtPose::Response> resp)
+  {
+    // Synthesise a Pick request with the provided odom-frame coordinates,
+    // then inject them as if they came from detection + TF conversion.
+    auto t0 = std::chrono::steady_clock::now();
+    const std::string& label = req->object_label;
+    double ox = req->x, oy = req->y, oz = req->z;
+    RCLCPP_INFO(get_logger(), "[pick_at_pose] %s at odom(%.3f, %.3f, %.3f)",
+                label.c_str(), ox, oy, oz);
+
+    if (grasp_pubs_.find(label) == grasp_pubs_.end()) {
+      resp->success = false;
+      resp->message = "Unknown object: " + label;
+      return;
+    }
+
+    // Register table collision object before moving arm so the home path
+    // avoids the table (pick_cb also calls this, but we need it here first).
+    add_pick_table_collision_object();
+    // Ensure arm is at a clean home before picking — required when called
+    // in sequence (e.g. second cube) because the previous place may leave
+    // the arm in a slightly off-nominal config in DART physics.
+    arm_mgi_->setNamedTarget("home");
+    arm_mgi_->move();
+
+    // Delegate to the regular Pick service by temporarily faking the request.
+    auto pick_req = std::make_shared<mm_interfaces::srv::Pick::Request>();
+    pick_req->object_label = label;
+    auto pick_resp = std::make_shared<mm_interfaces::srv::Pick::Response>();
+
+    // Inject the odom coordinates into latest_detections_ so pick_cb can find them.
+    auto fake_det = std::make_shared<mm_interfaces::msg::DetectionArray>();
+    mm_interfaces::msg::Detection d;
+    d.label = label; d.color = label;
+    // pick_cb converts map→odom; since map=odom (identity TF), pass same coords.
+    d.x = ox; d.y = oy; d.z = oz; d.confidence = 1.0;
+    fake_det->detections.push_back(d);
+    auto saved = latest_detections_;
+    latest_detections_ = fake_det;
+
+    pick_cb(pick_req, pick_resp);
+
+    latest_detections_ = saved;
+    resp->success = pick_resp->success;
+    resp->message  = pick_resp->message;
+    RCLCPP_INFO(get_logger(), "[pick_at_pose] %s", resp->message.c_str());
   }
 
   // ── Place ────────────────────────────────────────────────────────────────
@@ -811,7 +867,7 @@ private:
     double sx = start_tf.transform.translation.x;
     double sy = start_tf.transform.translation.y;
 
-    constexpr double SPEED = 0.15;  // m/s, conservative
+    constexpr double SPEED = 0.40;
     double target_abs = std::abs(distance_m);
     geometry_msgs::msg::Twist cmd;
     cmd.linear.x = (distance_m >= 0.0 ? SPEED : -SPEED);
@@ -860,7 +916,7 @@ private:
 
   void drive_back(double meters)
   {
-    constexpr double SPEED = 0.25;
+    constexpr double SPEED = 0.40;
     geometry_msgs::msg::TransformStamped start_tf;
     try {
       start_tf = tf_buffer_->lookupTransform("odom", "base_footprint", tf2::TimePointZero);
@@ -972,6 +1028,7 @@ private:
   rclcpp::Service<mm_interfaces::srv::CloseGripper>::SharedPtr   close_srv_;
   rclcpp::Service<mm_interfaces::srv::GetSceneState>::SharedPtr  state_srv_;
   rclcpp::Service<mm_interfaces::srv::DriveDistance>::SharedPtr  drive_srv_;
+  rclcpp::Service<mm_interfaces::srv::PickAtPose>::SharedPtr     pick_at_pose_srv_;
   rclcpp::Client<nav2_msgs::srv::ClearEntireCostmap>::SharedPtr clear_costmap_client_;
 
   std::shared_ptr<moveit::planning_interface::MoveGroupInterface> arm_mgi_;

@@ -4,3 +4,12 @@ install/
 log/
 .vscode/
 venv/
+
+# Paper / submission artifacts (not part of the robot system)
+Pictures/
+figures/
+paper/
+aset2026_paper.tex
+aset2026_submission/
+aset2026_submission.zip
+*.pdf

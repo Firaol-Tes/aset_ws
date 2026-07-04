@@ -46,20 +46,17 @@ using namespace std::chrono_literals;
 namespace baseline_params {
   constexpr const char* PICK_LOCATION    = "table";
   constexpr const char* DELIVER_LOCATION = "dispatch_zone";
-  constexpr const char* OBJECT_LABEL     = "red_cube";
-  constexpr double HARDCODED_CUBE_X = 2.0;
-  constexpr double HARDCODED_CUBE_Y = 0.12;
-  constexpr double HARDCODED_CUBE_Z = 0.42;
 
-  // red_cube sits right at the edge of arm reach from navigate_to(table)'s
-  // parking pose (confirmed: the LLM planner's first pick attempt at this
-  // same position also failed with "out of reach" in Scenario 1, before it
-  // recovered by driving closer). A real commissioning engineer would
-  // calibrate this once rather than ship an untested coordinate — this
-  // fixed approach step is that calibration, baked in as a constant. It's
-  // still 100% non-adaptive: a fixed distance, not a response to anything
-  // perceived.
-  constexpr double APPROACH_NUDGE_M = 0.15;
+  // Red cube — spawn: <pose>2.0 0.12 0.40 0 0 0</pose>
+  constexpr const char* RED_LABEL  = "red_cube";
+  constexpr double RED_X = 2.0, RED_Y = 0.12, RED_Z = 0.42;
+
+  // Green cube — spawn: <pose>2.0 0.00 0.40 0 0 0</pose>
+  constexpr const char* GREEN_LABEL = "green_cube";
+  constexpr double GREEN_X = 2.0, GREEN_Y = 0.00, GREEN_Z = 0.42;
+
+  // Approach nudge: 0.15m was insufficient; LLM used 0.30m to succeed.
+  constexpr double APPROACH_NUDGE_M = 0.30;
 }
 
 struct StepResult {
@@ -84,6 +81,7 @@ class BaselineController : public rclcpp::Node
 public:
   BaselineController() : Node("baseline_controller")
   {
+    declare_parameter("two_cubes", false);
     nav_cli_   = create_client<mm_interfaces::srv::NavigateTo>("tool_server/navigate_to");
     drive_cli_ = create_client<mm_interfaces::srv::DriveDistance>("tool_server/drive_distance");
     pick_cli_  = create_client<mm_interfaces::srv::PickAtPose>("tool_server/pick_at_pose");
@@ -104,9 +102,12 @@ public:
   void run()
   {
     using namespace baseline_params;
-    RCLCPP_INFO(get_logger(), "=== BASELINE CONTROLLER: hardcoded pick-and-deliver ===");
-    const std::string task = std::string("pick up ") + OBJECT_LABEL + " and place it in " + DELIVER_LOCATION;
+    bool two_cubes = get_parameter("two_cubes").as_bool();
+    const std::string task = two_cubes
+      ? "take red cube then green cube to dispatch_zone"
+      : "take red cube to dispatch_zone";
 
+    RCLCPP_INFO(get_logger(), "=== BASELINE CONTROLLER: %s ===", task.c_str());
     RCLCPP_INFO(get_logger(), "Waiting for tool_server services...");
     nav_cli_->wait_for_service();
     drive_cli_->wait_for_service();
@@ -118,55 +119,43 @@ public:
     std::vector<StepResult> steps;
     bool success = true;
 
-    // Step 1: navigate to the (hardcoded) pick location
-    success = run_step(steps, "navigate_to", [&] {
-      auto req = std::make_shared<mm_interfaces::srv::NavigateTo::Request>();
-      req->location = PICK_LOCATION;
-      auto res = call_blocking(nav_cli_, req);
-      return std::make_pair(res->success, res->message);
-    });
-
-    // Step 2: fixed approach nudge — see APPROACH_NUDGE_M comment above.
-    if (success) {
-      success = run_step(steps, "drive_distance", [&] {
+    // Deliver one cube: navigate → nudge → pick_at_pose → navigate → place
+    auto deliver_one = [&](const char* label, double cx, double cy, double cz) {
+      if (success) success = run_step(steps, "navigate_to", [&] {
+        auto req = std::make_shared<mm_interfaces::srv::NavigateTo::Request>();
+        req->location = PICK_LOCATION;
+        auto res = call_blocking(nav_cli_, req);
+        return std::make_pair(res->success, res->message);
+      });
+      if (success) success = run_step(steps, "drive_distance", [&] {
         auto req = std::make_shared<mm_interfaces::srv::DriveDistance::Request>();
         req->distance_m = APPROACH_NUDGE_M;
         auto res = call_blocking(drive_cli_, req);
         return std::make_pair(res->success, res->message);
       });
-    }
-
-    // Step 3: pick at the hardcoded cube position — NOT perception-driven.
-    if (success) {
-      success = run_step(steps, "pick_at_pose", [&] {
+      if (success) success = run_step(steps, "pick_at_pose", [&] {
         auto req = std::make_shared<mm_interfaces::srv::PickAtPose::Request>();
-        req->object_label = OBJECT_LABEL;
-        req->x = HARDCODED_CUBE_X;
-        req->y = HARDCODED_CUBE_Y;
-        req->z = HARDCODED_CUBE_Z;
+        req->object_label = label; req->x = cx; req->y = cy; req->z = cz;
         auto res = call_blocking(pick_cli_, req);
         return std::make_pair(res->success, res->message);
       });
-    }
-
-    // Step 4: navigate to the (hardcoded) delivery location
-    if (success) {
-      success = run_step(steps, "navigate_to", [&] {
+      if (success) success = run_step(steps, "navigate_to", [&] {
         auto req = std::make_shared<mm_interfaces::srv::NavigateTo::Request>();
         req->location = DELIVER_LOCATION;
         auto res = call_blocking(nav_cli_, req);
         return std::make_pair(res->success, res->message);
       });
-    }
-
-    // Step 5: place
-    if (success) {
-      success = run_step(steps, "place", [&] {
+      if (success) success = run_step(steps, "place", [&] {
         auto req = std::make_shared<mm_interfaces::srv::Place::Request>();
         req->location_name = DELIVER_LOCATION;
         auto res = call_blocking(place_cli_, req);
         return std::make_pair(res->success, res->message);
       });
+    };
+
+    deliver_one(RED_LABEL,   RED_X,   RED_Y,   RED_Z);
+    if (two_cubes) {
+      deliver_one(GREEN_LABEL, GREEN_X, GREEN_Y, GREEN_Z);
     }
 
     double duration_sec = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -174,7 +163,6 @@ public:
 
     RCLCPP_INFO(get_logger(), "=== BASELINE CONTROLLER %s (%.1fs) ===",
                 success ? "SUCCEEDED" : "FAILED", duration_sec);
-
     log_run(task, success, duration_sec, steps);
   }
 
