@@ -76,9 +76,9 @@ and enables autonomous replanning after execution failures. We compare this
 planner against a hardcoded baseline that runs the same task through the
 same tool services with a fixed, perception-blind sequence and no recovery.
 Single-object pick-and-deliver is reported complete in 13/16 trials, most
-of them involving an autonomous recovery from a failed first grasp; because
-outcomes were self-reported rather than checked against the simulator, four
-of those runs end with a failed or timed-out place, bounding the true rate
+of them involving an autonomous recovery from a failed first grasp. Outcomes
+were self-reported rather than checked against the simulator, and four of
+those runs end with a failed or timed-out place, so the true rate lies
 between 9/16 and 13/16. The baseline is faster and repeatable on its tuned
 configuration but cannot adapt, and LLM reliability degrades on
 multi-object and ambiguous commands.
@@ -1096,8 +1096,6 @@ and real-robot transfer.
 All packages, tool schemas, the LLM system prompt, the world file, and the
 experiment/logging code are available in the project repository:
 \url{https://github.com/Firaol-Tes/aset_ws}.
-A companion technical dossier documents every version, coordinate, tool,
-and result with provenance.
 
 % =========================================================================
 \begin{thebibliography}{99}
