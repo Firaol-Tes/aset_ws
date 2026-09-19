@@ -168,7 +168,7 @@ principles for ChatGPT-driven robotics, largely through demonstrations.
 
 \textbf{Position of this work.} We claim no algorithmic novelty over these
 paradigms; we contribute a fully open-stack, end-to-end implementation, a
-baseline sharing the identical action interface
+baseline sharing the same tool server and grasp implementation
 (Section~\ref{sec:baseline}), and a candid reliability analysis
 that---like SayCan's failure appendices---treats characterized failure
 modes as a result rather than an embarrassment. The stack components are
@@ -403,7 +403,7 @@ designed.
 
 To isolate the contribution of closed-loop LLM decision-making from the
 raw capability of the stack, the baseline executes the same task through
-the \emph{same} tool services, differing only in how the next action is
+the \emph{same} tool server, differing only in how the next action is
 chosen. It runs a fixed sequence---\texttt{navigate\_to(table)}
 $\rightarrow$ \texttt{drive\_distance(0.30)} $\rightarrow$
 \texttt{pick\_at\_pose} $\rightarrow$
@@ -432,7 +432,8 @@ An automated experiment runner resets the world before each trial (release
 and open the gripper, return the arm home, restore cube spawn poses,
 return the base to its home pose), then issues the command and records
 success, wall-clock duration, path length, and---for the LLM---the number
-of model calls and failed tool calls. The simulated warehouse and robot
+of model calls and failed tool calls. Path length is recorded in the
+released logs but is not analysed in this paper. The simulated warehouse and robot
 platform are shown in Fig.~\ref{fig:world}. A trial is scored a
 \emph{success} when the system under test reports the delivery complete---
 \texttt{task\_complete(success=true)} for the planner, a successful final
@@ -698,7 +699,7 @@ controller whose rates we decline to pool
 instrumentation---takes 256--507\,s wall-clock including reset overhead. And because the baseline is non-reactive \emph{by construction},
 its inability to adapt is a property of how it was written rather than an
 experimental finding. We therefore present this contrast as
-\emph{determinism versus adaptability} on a shared action interface, and
+\emph{determinism versus adaptability} on a shared tool server, and
 not as evidence that language models outperform closed-loop alternatives;
 Section~\ref{sec:limitations} states the control that would be needed for
 the latter.
