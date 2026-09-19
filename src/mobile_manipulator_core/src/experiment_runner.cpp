@@ -43,6 +43,8 @@
 #include "nav_msgs/msg/odometry.hpp"
 #include "std_msgs/msg/empty.hpp"
 #include "mobile_manipulator_core/gz_teleport.hpp"
+#include "mobile_manipulator_core/gz_pose.hpp"
+#include "mobile_manipulator_core/baseline_params.hpp"
 
 using namespace std::chrono_literals;
 using ExecuteTask = mm_interfaces::action::ExecuteTask;
@@ -52,13 +54,17 @@ namespace baseline_task {
   // hardcoded values, same reasoning (see that file's comments). Kept as a
   // short, separate constant block rather than a shared header: this is
   // ~6 lines, not worth the indirection.
-  constexpr const char* PICK_LOCATION    = "table";
-  constexpr const char* DELIVER_LOCATION = "dispatch_zone";
-  constexpr const char* OBJECT_LABEL     = "red_cube";
-  constexpr double HARDCODED_CUBE_X = 2.0;
-  constexpr double HARDCODED_CUBE_Y = 0.12;
-  constexpr double HARDCODED_CUBE_Z = 0.42;
-  constexpr double APPROACH_NUDGE_M = 0.15;
+  // Aliases onto baseline_params.hpp -- the same constants baseline_controller
+  // uses. This sequence is a copy of that controller's, so it must not carry
+  // its own values: the nudge here was left at 0.15 while the controller was
+  // calibrated to 0.30, which made the two incomparable.
+  constexpr const char* PICK_LOCATION    = baseline_params::PICK_LOCATION;
+  constexpr const char* DELIVER_LOCATION = baseline_params::DELIVER_LOCATION;
+  constexpr const char* OBJECT_LABEL     = baseline_params::RED_LABEL;
+  constexpr double HARDCODED_CUBE_X = baseline_params::RED_X;
+  constexpr double HARDCODED_CUBE_Y = baseline_params::RED_Y;
+  constexpr double HARDCODED_CUBE_Z = baseline_params::RED_Z;
+  constexpr double APPROACH_NUDGE_M = baseline_params::APPROACH_NUDGE_M;
 }
 
 namespace world_state {
@@ -71,6 +77,18 @@ namespace world_state {
     {"green_cube", 2.0,  0.00, 0.40},
     {"blue_cube",  2.0, -0.12, 0.40},
   };
+
+  // Dispatch zone geometry, read off the floor patch in warehouse.sdf
+  // (<model name="dispatch_zone"> at -2.0 0, a 0.8 x 0.8 box). Used to
+  // check delivery against the world instead of trusting the system under
+  // test to report its own success.
+  constexpr double DISPATCH_X      = -2.0;
+  constexpr double DISPATCH_Y      =  0.0;
+  constexpr double DISPATCH_HALF   =  0.4;
+  // A delivered cube rests on the floor. The bound rejects the case where
+  // the robot is parked over the zone still holding the cube at arm height
+  // (table pick height is 0.40 m, so 0.20 m clears it with margin).
+  constexpr double DISPATCH_MAX_Z  =  0.20;
 }
 
 struct ScenarioConfig {
@@ -121,6 +139,14 @@ struct TrialResult {
   int num_llm_calls = 0;
   int num_replans = 0;
   double time_to_recover_sec = -1.0;  // -1 = not applicable (no disturbance, or failed)
+  // Independent, simulator-side check of the delivery, recorded alongside
+  // -- never instead of -- the system's self-reported `success`, so the two
+  // can be compared and earlier runs stay interpretable.
+  //  1 = cube verified inside the dispatch zone
+  //  0 = cube verified outside it
+  // -1 = could not read the cube pose (verification unavailable)
+  int delivered_verified = -1;
+  double delivered_x = 0.0, delivered_y = 0.0, delivered_z = 0.0;
   std::string message;
 };
 
@@ -259,6 +285,8 @@ public:
       std::chrono::steady_clock::now() - t0).count() / 1000.0;
     result.path_length_m = path_length_m_;
 
+    verify_delivery(result);
+
     if (cfg.disturbance_enabled && disturbance_fired && result.success) {
       result.time_to_recover_sec = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - disturbance_fired_at).count() / 1000.0;
@@ -268,6 +296,45 @@ public:
   }
 
 private:
+  // Reads the target cube's true world pose and records whether it is
+  // inside the dispatch zone. Does not modify `success`: self-reported and
+  // verified outcomes are logged side by side so a disagreement between
+  // them is visible in the data rather than silently resolved here.
+  void verify_delivery(TrialResult& result)
+  {
+    gz_pose::Pose p;
+    const bool inside = gz_pose::within_zone(
+      world_state::WORLD_NAME, baseline_task::OBJECT_LABEL,
+      world_state::DISPATCH_X, world_state::DISPATCH_Y,
+      world_state::DISPATCH_HALF, world_state::DISPATCH_MAX_Z, p);
+
+    if (!inside && (p.x == 0.0 && p.y == 0.0 && p.z == 0.0)) {
+      RCLCPP_WARN(get_logger(),
+                  "[verify] Could not read %s pose -- delivery unverified",
+                  baseline_task::OBJECT_LABEL);
+      result.delivered_verified = -1;
+      return;
+    }
+
+    result.delivered_verified = inside ? 1 : 0;
+    result.delivered_x = p.x;
+    result.delivered_y = p.y;
+    result.delivered_z = p.z;
+
+    RCLCPP_INFO(get_logger(),
+                "[verify] %s at (%.2f, %.2f, %.2f) -> %s dispatch zone "
+                "(self-reported success=%s)",
+                baseline_task::OBJECT_LABEL, p.x, p.y, p.z,
+                inside ? "INSIDE" : "OUTSIDE", result.success ? "true" : "false");
+
+    if (inside != result.success) {
+      RCLCPP_WARN(get_logger(),
+                  "[verify] MISMATCH: self-reported success=%s but cube is %s "
+                  "the dispatch zone",
+                  result.success ? "true" : "false", inside ? "inside" : "outside");
+    }
+  }
+
   void on_odom(const nav_msgs::msg::Odometry::SharedPtr msg)
   {
     double x = msg->pose.pose.position.x;
@@ -385,7 +452,8 @@ static void log_csv(const std::string& path, const std::string& scenario,
   std::ofstream f(path, std::ios::app);
   if (need_header) {
     f << "timestamp,scenario,system,trial,success,total_time_sec,path_length_m,"
-         "num_llm_calls,num_replans,time_to_recover_sec,message\n";
+         "num_llm_calls,num_replans,time_to_recover_sec,"
+         "delivered_verified,delivered_x,delivered_y,delivered_z,message\n";
   }
   f << std::fixed << std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count() / 1000.0
@@ -398,6 +466,10 @@ static void log_csv(const std::string& path, const std::string& scenario,
     << "," << r.num_llm_calls
     << "," << r.num_replans
     << "," << r.time_to_recover_sec
+    << "," << r.delivered_verified
+    << "," << r.delivered_x
+    << "," << r.delivered_y
+    << "," << r.delivered_z
     << ",\"" << json_escape(r.message) << "\"\n";
 }
 

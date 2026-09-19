@@ -36,28 +36,12 @@
 #include "mm_interfaces/srv/pick_at_pose.hpp"
 #include "mm_interfaces/srv/place.hpp"
 
+#include "mobile_manipulator_core/baseline_params.hpp"
+
 using namespace std::chrono_literals;
 
-// ── Hardcoded task parameters — edit here for the disturbance experiment ──
-// Matches red_cube's spawn pose in warehouse.sdf: <pose>2.0 0.12 0.40 0 0 0</pose>
-// (model centre); pick targets the top face, +half the 4cm cube height. This
-// is the TRUE position — not fudged — see APPROACH_NUDGE_M below for why a
-// fixed approach step is needed before it's reachable.
-namespace baseline_params {
-  constexpr const char* PICK_LOCATION    = "table";
-  constexpr const char* DELIVER_LOCATION = "dispatch_zone";
-
-  // Red cube — spawn: <pose>2.0 0.12 0.40 0 0 0</pose>
-  constexpr const char* RED_LABEL  = "red_cube";
-  constexpr double RED_X = 2.0, RED_Y = 0.12, RED_Z = 0.42;
-
-  // Green cube — spawn: <pose>2.0 0.00 0.40 0 0 0</pose>
-  constexpr const char* GREEN_LABEL = "green_cube";
-  constexpr double GREEN_X = 2.0, GREEN_Y = 0.00, GREEN_Z = 0.42;
-
-  // Approach nudge: 0.15m was insufficient; LLM used 0.30m to succeed.
-  constexpr double APPROACH_NUDGE_M = 0.30;
-}
+// Hardcoded task parameters live in baseline_params.hpp, shared with
+// experiment_runner so the two cannot drift apart.
 
 struct StepResult {
   std::string step;

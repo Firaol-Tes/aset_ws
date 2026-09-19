@@ -108,7 +108,7 @@ ament_target_dependencies(baseline_controller
 )
 
 # ── experiment_runner ────────────────────────────────────────────────────────
-add_executable(experiment_runner src/experiment_runner.cpp src/gz_teleport.cpp)
+add_executable(experiment_runner src/experiment_runner.cpp src/gz_teleport.cpp src/gz_pose.cpp)
 target_include_directories(experiment_runner PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
