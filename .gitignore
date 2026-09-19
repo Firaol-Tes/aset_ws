@@ -5,6 +5,9 @@ log/
 .vscode/
 venv/
 
+# Internal working documents -- not published with the code release
+paper/
+
 # Paper build output and frozen submission artifacts (regenerable / archival)
 *.pdf
 aset2026_submission/
