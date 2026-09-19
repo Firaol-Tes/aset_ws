@@ -74,7 +74,8 @@ structured scene state and acts only by calling typed robot tool services;
 a fresh scene state after every action closes the perception--action loop
 and enables autonomous replanning after execution failures. We compare this
 planner against a hardcoded baseline that runs the same task through the
-same tool services with a fixed, perception-blind sequence and no recovery.
+same tool server and grasp implementation with a fixed, perception-blind
+sequence and no recovery.
 Single-object pick-and-deliver is reported complete in 13/16 trials, most
 of them involving an autonomous recovery from a failed first grasp. Outcomes
 were self-reported rather than checked against the simulator, and four of
@@ -131,8 +132,9 @@ Our contributions are:
     \item a reproducible closed-loop LLM mobile-manipulation system on a
     fully open-source stack, with the LLM confined to a typed tool
     interface and per-action scene-state feedback;
-    \item a comparison against a hardcoded baseline sharing the identical
-    tool services, which isolates decision-making from stack capability but
+    \item a comparison against a hardcoded baseline sharing the same tool
+    server and grasp implementation, which isolates decision-making from
+    stack capability but
     is not a controlled test of adaptivity, since the baseline is
     non-reactive by construction; and
     \item a transparent reliability analysis: success rates with confidence
@@ -457,9 +459,9 @@ details the scenarios, their initial conditions, and stopping criteria.
 \toprule
 \textbf{ID} & \textbf{System} & \textbf{Command / initial condition} & \textbf{$N$} & \textbf{Success criterion} & \textbf{Failure / limit} \\
 \midrule
-S1 & LLM & ``take the red cube to dispatch''; red cube on table & 5 & red cube in dispatch zone & abort, turn limit, or 200\,s tool timeout \\
-S2 & LLM & ``bring the red cube to dispatch''; all three cubes on table & 7 & the \emph{red} cube in dispatch zone & abort, turn limit, or 200\,s tool timeout \\
-S4 & LLM & as S1, cube displaced $\approx$18\,cm 5\,s after departure & 4 & red cube in dispatch zone & abort, turn limit, or 200\,s tool timeout \\
+S1 & LLM & ``take the red cube to dispatch''; red cube on table & 5 & red cube in dispatch zone & abort or turn limit \\
+S2 & LLM & ``bring the red cube to dispatch''; all three cubes on table & 7 & the \emph{red} cube in dispatch zone & abort or turn limit \\
+S4 & LLM & as S1, cube displaced $\approx$18\,cm 5\,s after departure & 4 & red cube in dispatch zone & abort or turn limit \\
 S3 & LLM & ``red cube to dispatch, then green''; both cubes on table & 7 & both cubes delivered in order & abort or turn limit \\
 S3$'$ & LLM & ``move all cubes to dispatch, red one first'' & 9 & all three delivered, red first & abort or turn limit \\
 S5 & LLM & ``tidy up the warehouse''; three cubes on table & 1 & cubes relocated to dispatch & abort or turn limit \\
@@ -531,13 +533,14 @@ Two logging paths exist in the release and they are not interchangeable, so
 we state which produced each reported number. Per-task LLM logs are written
 by the planner itself and record the full conversation, tool calls, timings
 and token counts; the experiment runner additionally appends one summary row
-per trial to a shared CSV. The LLM results below are computed from the
-per-task logs, and the scenario each run belongs to is recovered from the
+per trial to a shared CSV. The LLM results below
+(Table~\ref{tab:results}) are computed from the per-task logs, and the scenario each run belongs to is recovered from the
 runner's row for the same run. Ten single-object and two-cube runs on
 2026-07-01/02 were launched directly against the planner's action interface
 rather than through the runner; these have per-task logs but no runner row,
-and since the mid-task disturbance is applied only by the runner, they are
-nominal-condition runs by construction. The baseline results are from
+so their scenario is recovered from the command string recorded in the log
+itself. Since the mid-task disturbance is applied only by the runner, they
+are nominal-condition runs by construction. The baseline results are from
 \texttt{baseline\_controller}'s own log.
 
 The runner also contains a second, inlined copy of the baseline sequence,
@@ -647,7 +650,7 @@ loops}, in which the model exhausted its turn budget (e.g., 26 calls, 7 of
 them following a failed tool call) while oscillating between corrective
 moves. We report this as the characteristic failure mode of a flexible
 planner: where the baseline fails by rigidity, the LLM fails by
-indecision.
+indecision. Fig.~\ref{fig:chart}(a) summarises the per-scenario rates.
 
 % FIGURE 3 -----------------------------------------------------------------
 \begin{figure*}[t]
@@ -681,8 +684,8 @@ illustration of the failure geometry only.}
 \subsection{The Deterministic Baseline}
 
 On its calibrated configuration the baseline completed 5/6 single-object
-deliveries in 143--249\,s (mean 194\,s); the failure was an abort at
-navigation start. Being perception-blind and branch-free, it is roughly
+deliveries in 143--249\,s (mean 194\,s, Fig.~\ref{fig:chart}(b)); the
+failure was an abort at navigation start. Being perception-blind and branch-free, it is roughly
 $2.3\times$ faster than the LLM on average and highly repeatable---but it
 cannot react. It succeeds precisely when the world matches the program it
 was given, and by construction has no recovery path when it does not. Two
