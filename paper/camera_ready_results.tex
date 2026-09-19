@@ -1,0 +1,222 @@
+% =========================================================================
+% CAMERA-READY REPLACEMENT SNIPPETS  --  drafted from the logs, no re-runs
+% =========================================================================
+%
+% Every number below was recomputed from llm_task_logs/*.json,
+% baseline_logs/baseline_results.csv and experiment_logs/experiment_results.csv
+% over the frozen window (runs on/after 2026-06-25). Wilson 95% intervals
+% recomputed to match.
+%
+% Replaces: Table V (tab:results), the S1/S2/S3 result subsections, and adds
+% the S4 subsection. Also adds a data-provenance paragraph to Sec. V.
+%
+% CHANGES OF SUBSTANCE vs. the accepted version:
+%   1. The single "S1, 16 trials, 81%" row is split into the three scenarios
+%      it actually pools (S1 nominal, S2 grounding, S4 disturbance). The
+%      pooled figure is kept as a summary line so the accepted number is
+%      still visible and reconcilable, not silently withdrawn.
+%   2. S4 is reported. It was run; the accepted text says it was not.
+%   3. Two-cube ordered delivery is 5/7, not 2/4 -- three further two-cube
+%      runs on 2026-07-01 (including one with the order reversed) were
+%      omitted from the accepted version.
+%   4. The three-cube command ("move all cubes...", 0/9) is reported rather
+%      than dropped. It is the evidence for the scalability limitation.
+%   5. The baseline row states which implementation produced it.
+%   6. S4 is reported descriptively, NOT as an adaptability result: the pick
+%      tool resolves coordinates from live perception, so the displacement is
+%      absorbed by the architecture, not by the planner. No S4 run called
+%      detect_objects, and 2 of the 4 end in place/nav timeouts.
+%   7. New subsection sec:verif accounts for self-reported vs verified
+%      success and bounds the single-object rate at 9/16--13/16.
+%
+% =========================================================================
+
+
+% ---------------------------------------------------------------- Sec. V
+% Data provenance -- insert at the end of Sec. V (Experimental Setup),
+% before the Results section.
+
+\subsection{Data Provenance}
+\label{sec:provenance}
+
+Two logging paths exist in the release and they are not interchangeable, so
+we state which produced each reported number. Per-task LLM logs
+(\texttt{llm\_task\_logs/*.json}) are written by the planner itself and
+record the full conversation, tool calls, timings and token counts; the
+experiment runner additionally appends one summary row per trial to
+\texttt{experiment\_logs/experiment\_results.csv}. The LLM results below are
+computed from the per-task logs, and the scenario each run belongs to is
+recovered from the runner's row for the same run. Ten single-object and
+two-cube runs on 2026-07-01/02 were launched directly against the planner's
+action interface rather than through the runner; these have per-task logs but
+no runner row, and since the mid-task disturbance is applied only by the
+runner, they are nominal-condition runs by construction. The baseline results
+are from \texttt{baseline\_logs/baseline\_results.csv}, written by
+\texttt{baseline\_controller}.
+
+The runner also contains a second, inlined copy of the baseline sequence,
+used when it is invoked with \texttt{--system baseline}. That copy applies a
+0.15\,m approach nudge, whereas \texttt{baseline\_controller} applies the
+calibrated 0.30\,m nudge (Sec.~\ref{sec:lessons}); the two are therefore
+different controllers and we do not pool their results. Runs produced by the
+inlined copy are reported separately in Table~\ref{tab:runner-baseline} and
+are not used for any comparison against the LLM planner.
+
+
+% ---------------------------------------------------------- Table V (new)
+% Replaces tab:results.
+
+\begin{table*}[t]
+\caption{Frozen-System Results (runs on/after 2026-06-25). Success is as
+reported by the system under test and is \emph{not} verified against the
+simulator; four of the LLM successes end with a failed or timed-out
+\texttt{place} call (Sec.~\ref{sec:verif}). LLM successes typically include
+$\geq 1$ autonomous replan.}
+\label{tab:results}
+\centering
+\begin{tabular}{@{}llccccc@{}}
+\toprule
+\textbf{Scenario} & \textbf{System} & \textbf{N} & \textbf{Success} &
+\textbf{95\% CI$^\ddagger$} & \textbf{Mean time (success)} & \textbf{Mean calls} \\ \midrule
+S1 single, nominal        & LLM      & 5  & 80\% (4/5)    & [38, 96]\%  & 430\,s (243--714) & 10.2 \\
+S2 single, colour grounding & LLM    & 7  & 71\% (5/7)    & [36, 92]\%  & 471\,s (232--714) & 9.0 \\
+S4 single, mid-task disturbance & LLM & 4 & 100\% (4/4)   & [51, 100]\% & 457\,s (299--546) & 6.5 \\
+\quad\emph{all single-object pooled} & LLM & 16 & \emph{81\% (13/16)} & \emph{[57, 93]\%} & \emph{454\,s (232--714)} & \emph{8.8} \\ \midrule
+S1/S2 single              & Baseline$^{\dagger}$ & 6 & 83\% (5/6) & [44, 97]\% & 194\,s (143--249) & --- \\ \midrule
+S3 two-cube, ordered      & LLM      & 7  & 71\% (5/7)    & [36, 92]\%  & 551\,s (477--648) & 19.7 \\
+S3$'$ three-cube, ordered & LLM      & 9  & 0\% (0/9)     & [0, 30]\%   & ---               & 24.4 \\
+S3 two-cube, ordered      & Baseline$^{\dagger}$ & 1 & 0\% (0/1) & [0, 79]\% & --- & --- \\ \midrule
+S5 ``tidy up''            & LLM      & 1  & qualitative   & ---         & ---               & 28.0 \\ \bottomrule
+\end{tabular}
+\vspace{2pt}
+\begin{flushleft}
+\footnotesize
+$^{\dagger}$\texttt{baseline\_controller} on its calibrated 0.30\,m approach
+nudge. A seventh single-object run that same session deliberately re-tested
+the superseded 0.15\,m nudge and failed at the grasp; it is excluded as a
+configuration probe rather than a trial. See
+Table~\ref{tab:runner-baseline} for the runner's separate inlined baseline.
+$^{\ddagger}$Wilson score interval. Sample sizes are small and all rates are
+\emph{preliminary}; the intervals overlap almost everywhere, so we draw
+qualitative rather than quantitative conclusions from the comparison.
+\end{flushleft}
+\end{table*}
+
+
+% ------------------------------------------------- Table (new, secondary)
+
+\begin{table}[t]
+\caption{Trials from the Experiment Runner's Inlined Baseline Sequence
+(0.15\,m approach nudge). Reported for completeness; not comparable to
+Table~\ref{tab:results}.}
+\label{tab:runner-baseline}
+\centering
+\begin{tabular}{@{}lccl@{}}
+\toprule
+\textbf{Scenario} & \textbf{N} & \textbf{Success} & \textbf{Dominant failure} \\ \midrule
+S1 & 13 & 31\% (4/13) & Navigation (7 of 9)$^{\S}$; grasp reach (2 of 9) \\
+S2 & 6  & 17\% (1/6)  & Navigation (5 of 5) \\
+S4 & 5  & 20\% (1/5)  & Navigation (3 of 4); grasp reach (1 of 4) \\ \bottomrule
+\end{tabular}
+\vspace{2pt}
+\begin{flushleft}\footnotesize
+$^{\S}$Four Nav2 timeouts or failures and three aborts in which the
+\texttt{navigate\_to\_pose} action server was not available at trial start.
+\end{flushleft}
+\end{table}
+
+
+% ------------------------------------------------------- S4 subsection
+
+\subsection{S4: Behaviour Under a Mid-Task Disturbance}
+\label{sec:s4}
+
+S4 repeats the S1 delivery, but the runner teleports the red cube to a new
+tabletop position 5\,s after \texttt{navigate\_to(table)} is issued --- while
+the robot is still driving. The displacement is $\approx$18\,cm in $y$,
+chosen to stay inside the tabletop's collision bounds (a teleport sets only
+the instantaneous pose; physics resumes immediately, so a cube placed past
+the edge falls) and away from the far edge, where reachability rather than
+replanning would dominate the outcome.
+
+All four frozen-system trials were reported complete, but the mechanism is
+not the one the disturbance was designed to probe, and we state that
+plainly. The \texttt{pick} tool takes an object label, not coordinates: the
+tool server resolves the target from live perception at call time. The
+planner therefore never holds a stale position to be invalidated. In two of
+the four runs the post-disturbance \texttt{pick} simply succeeded at the new
+location with no corrective action by the planner at all; in the other two
+the planner executed the same forward-nudge recovery it uses in S1, in
+response to an out-of-reach error rather than to the displacement.
+\emph{No S4 run issued \texttt{detect\_objects}.} What S4 demonstrates is
+that a perception-resolved action interface absorbs object displacement ---
+an architectural property, available to any controller built on the same
+tools --- and not that the language model replans around it.
+
+Two of the four runs are additionally weak as evidence of delivery: the
+final \texttt{navigate\_to} and \texttt{place} calls both returned the
+planner's 200\,s client-side timeout, after which the model called
+\texttt{task\_complete(success=true)} regardless (Sec.~\ref{sec:verif}).
+We therefore report S4 as a descriptive result and draw no reliability or
+adaptability claim from it. A disturbance experiment that would support such
+a claim needs a target the planner must re-localize itself, a
+configuration-matched baseline, and the ground-truth delivery check of
+Sec.~\ref{sec:verif}; we identify it as the immediate next experiment rather
+than claiming it here.
+
+
+% ------------------------------------------------ S3 subsection (revised)
+
+\subsection{S3: Multi-Object Sequential Delivery}
+\label{sec:s3}
+
+Across seven two-cube ordered deliveries the planner succeeded in five
+(71\%, [36, 92]\%), averaging 19.7 model calls. Four used the phrasing
+``move the red cube to dispatch, then the green cube'' and three a more
+explicit variant; one of the latter reversed the order (green first, then
+red) and was executed in the stated order, which is evidence that the
+sequence is read from the command rather than fixed by the tool set. The two
+failures both terminated at the turn limit after repeated replans.
+
+Reliability does not survive a third object. On nine trials of ``move all
+cubes to the dispatch zone, red one first,'' the planner never completed the
+task (0/9, [0, 30]\%), averaging 24.4 model calls; a further five runner
+trials of the same command aborted before the planner produced any call and
+are excluded. The characteristic trajectory is that the first cube is
+delivered, after which repeated navigation and pick failures accumulate and
+the planner exhausts its turn budget while trying to recover. We report this
+as the paper's clearest scalability limitation: the same feedback loop that
+supplies recovery on a single object supplies, on a longer horizon, an
+unbounded supply of things to recover from.
+
+
+% ------------------------------------------- Success accounting (new)
+
+\subsection{How Success Was Determined, and Its Limits}
+\label{sec:verif}
+
+Success in Table~\ref{tab:results} is as reported by the system under test:
+for the LLM, its own \texttt{task\_complete(success)} call; for the
+baseline, the result of its final step. Neither is checked against the
+simulator. Two properties of the stack make this a real limitation rather
+than a formality. First, \texttt{place} returns success unconditionally,
+including on the fallback path where pre-place IK fails and the object is
+released from wherever the arm happens to be. Second, the planner's per-tool
+timeout is client-side: when it expires the planner records a failure while
+the underlying service call may still be running to completion, so a
+timed-out step is genuinely ambiguous rather than definitely failed.
+
+Auditing the tool traces of the 13 self-reported single-object successes
+against their final \texttt{place} call: nine end with \texttt{place}
+reporting success; three end with a 200\,s \texttt{place} timeout whose true
+outcome is unknown; and one reports \texttt{``No object currently held''},
+which cannot correspond to a delivery. Read strictly, the single-object rate
+is bounded below by 9/16 (56\%) and above by the 13/16 (81\%) we report;
+the S4 row is the most affected, with two of its four runs in the
+ambiguous class.
+
+We have since added a simulator-side check that reads the cube's true pose
+and tests it against the dispatch-zone geometry, recorded as a separate
+column alongside the self-reported outcome so the two can disagree visibly.
+It cannot be applied retroactively to the runs reported here, and all
+future trials in this system are verified by it.

@@ -5,11 +5,15 @@ log/
 .vscode/
 venv/
 
-# Paper / submission artifacts (not part of the robot system)
-Pictures/
-figures/
-paper/
-aset2026_paper.tex
+# Paper build output and frozen submission artifacts (regenerable / archival)
+*.pdf
 aset2026_submission/
 aset2026_submission.zip
-*.pdf
+Pictures/
+
+# LaTeX build leftovers
+*.aux
+*.bbl
+*.blg
+*.out
+*.synctex.gz
