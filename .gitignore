@@ -20,3 +20,4 @@ Pictures/
 *.blg
 *.out
 *.synctex.gz
+*.log
