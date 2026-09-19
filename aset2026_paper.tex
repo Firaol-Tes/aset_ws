@@ -149,7 +149,7 @@ Policies~\cite{codeaspolicies} has the LLM emit executable policy code, and
 ProgPrompt~\cite{progprompt} showed structured prompting improves plan
 validity. End-to-end vision-language-action models such as
 PaLM-E~\cite{palme} and RT-2~\cite{rt2}, and value-map composition as in
-VoxPoser~\cite{voxposer}, form a parallel line; recent surveys catalogue
+VoxPoser~\cite{voxposer}, form a parallel line; a recent survey catalogues
 the space~\cite{llmrobosurvey}. We instead follow the \emph{tool-calling}
 paradigm native to commercial LLM APIs---akin to ReAct~\cite{react} and
 Toolformer~\cite{toolformer}: the model only calls typed ROS~2 services
@@ -326,7 +326,11 @@ action) and \texttt{task\_complete(success, summary)} ends the loop.}
 The planner (Fig.~\ref{fig:architecture}) exposes a ROS~2 action
 \texttt{/execute\_task}. Given a command, it fetches an initial scene
 state, starts an LLM conversation governed by a fixed system prompt, and
-loops for up to a maximum number of turns (default 30). At each turn the
+loops for up to \texttt{max\_turns} tool-result rounds (25 or 30 depending
+on scenario; Table~\ref{tab:llmconfig}). We report \emph{model calls}
+rather than turns: the opening call that receives the command precedes the
+first round, so a run that exhausts a 25-turn budget makes 26 calls. At
+each turn the
 model either requests a tool call---dispatched generically by constructing
 the service request from the tool's schema and polling the result with a
 200\,s deadline---or calls \texttt{task\_complete}. Crucially, after every
@@ -400,13 +404,20 @@ raw capability of the stack, the baseline executes the same task through
 the \emph{same} tool services, differing only in how the next action is
 chosen. It runs a fixed sequence---\texttt{navigate\_to(table)}
 $\rightarrow$ \texttt{drive\_distance(0.30)} $\rightarrow$
-pick-at-hardcoded-pose $\rightarrow$
+\texttt{pick\_at\_pose} $\rightarrow$
 \texttt{navigate\_to(dispatch\_zone)} $\rightarrow$
 \texttt{place}---with three deliberate properties of a traditional
 automation program: (i) it picks at a compile-time-constant coordinate and
 never calls perception; (ii) it does not branch on scene state; and
 (iii) it has no recovery---any failed step aborts the run. A two-cube mode
-repeats the sequence for a second object. The baseline is thus fast,
+repeats the sequence for a second object. \texttt{pick\_at\_pose} is the one
+service the baseline uses that the planner does not: the planner's
+\texttt{pick} takes an object label and resolves its position from live
+perception at call time (Table~\ref{tab:tools}), whereas
+\texttt{pick\_at\_pose} takes a literal coordinate, synthesises a detection
+at it, and delegates to the same grasp routine. The two systems therefore
+share the grasp implementation and differ only in where the target position
+comes from. The baseline is thus fast,
 deterministic, and rigid by construction: it embodies the ``sophisticated
 flowchart'' character of conventional warehouse automation that motivated
 this study.
@@ -423,14 +434,19 @@ of model calls and failed tool calls. The simulated warehouse and robot
 platform are shown in Fig.~\ref{fig:world}. A trial is scored a
 \emph{success} when the system under test reports the delivery complete---
 \texttt{task\_complete(success=true)} for the planner, a successful final
-step for the baseline---and a \emph{failure} if any step aborts, the run
-exceeds the turn limit (Table~\ref{tab:llmconfig}) or the per-tool 200\,s
-timeout, or the planner calls \texttt{task\_complete(success=false)}. This
-criterion is self-reported and was not checked against the simulator;
+step for the baseline---and a \emph{failure} if the run aborts, exceeds the
+turn limit (Table~\ref{tab:llmconfig}), or the planner calls
+\texttt{task\_complete(success=false)}. A per-tool 200\,s timeout is logged
+and returned to the planner as a failed tool call, but does not itself end
+the trial: the planner may keep acting and still report completion, which is
+why some counted successes contain a timed-out call
+(Section~\ref{sec:verif}). For the baseline, which has no recovery path, a
+timed-out step does abort the run. This criterion is self-reported and was
+not checked against the simulator;
 Section~\ref{sec:verif} quantifies what that costs and describes the
 ground-truth check now in the release; Section~\ref{sec:provenance} states
 which log produced each reported number. Table~\ref{tab:scenarios}
-details the four scenarios, their initial conditions, and stopping criteria.
+details the scenarios, their initial conditions, and stopping criteria.
 
 \begin{table*}[t]
 \caption{Evaluation Scenarios: Initial Conditions, Trial Count, and Stopping Criteria.}
@@ -502,7 +518,8 @@ All results below are for runs on or after 2026-06-25, once the
 reachability margin was stable, and we report the \emph{true} success rate
 of that window, including runs that still failed. Two qualifications are
 owed to the reader. The released code is not byte-identical to the code
-under test: a later commit changed the drive speeds (above) and corrected
+under test: a later commit changed the drive speeds
+(Table~\ref{tab:params}) and corrected
 the sign of the post-pick reverse, so re-running the release reproduces the
 method but not the exact durations. And the window is defined by a
 reachability fix, not by a freeze on the whole stack.
@@ -671,9 +688,11 @@ cannot react. It succeeds precisely when the world matches the program it
 was given, and by construction has no recovery path when it does not. Two
 caveats bound what the comparison establishes. The durations are not
 measured by the same instrument: the baseline times come from its own
-controller, the LLM times from the planner, and the same baseline task run
-through the experiment runner takes 256--507\,s wall-clock including reset
-overhead. And because the baseline is non-reactive \emph{by construction},
+controller and the LLM times from the planner. For scale, the same scripted
+task run through the experiment runner's inlined copy---a different
+controller whose rates we decline to pool
+(Section~\ref{sec:provenance}), cited here only for its
+instrumentation---takes 256--507\,s wall-clock including reset overhead. And because the baseline is non-reactive \emph{by construction},
 its inability to adapt is a property of how it was written rather than an
 experimental finding. We therefore present this contrast as
 \emph{determinism versus adaptability} on a shared action interface, and
@@ -942,6 +961,8 @@ planning study would never surface:
 
 \begin{itemize}
 \item \textbf{Unsigned reverse distance.} The post-pick reverse maneuver
+  (\texttt{drive\_back}, the tool server's internal helper, not the
+  \texttt{drive\_distance} tool exposed to the planner)
 measured progress as $\sqrt{dx^2 + dy^2}$, which is always positive. With
 the arm extended, its inertia could drag the base \emph{forward}, yet this
 was counted as backward progress, parking the robot against the table. The
@@ -1104,74 +1125,59 @@ experiment/logging code are available in the project repository:
 M.~Ahn \emph{et~al.}, ``Do as {I} can, not as {I} say: Grounding language
 in robotic affordances,'' in \emph{Proc. Conf. Robot Learning (CoRL)},
 2022, arXiv:2204.01691.
-
 \bibitem{codeaspolicies}
 J.~Liang \emph{et~al.}, ``Code as policies: Language model programs for
 embodied control,'' in \emph{Proc. IEEE Int. Conf. Robotics and
 Automation (ICRA)}, 2023.
-
-\bibitem{innermonologue}
-W.~Huang \emph{et~al.}, ``Inner monologue: Embodied reasoning through
-planning with language models,'' in \emph{Proc. Conf. Robot Learning
-(CoRL)}, 2022.
-
 \bibitem{progprompt}
 I.~Singh \emph{et~al.}, ``{ProgPrompt}: Generating situated robot task
 plans using large language models,'' in \emph{Proc. IEEE Int. Conf.
 Robotics and Automation (ICRA)}, 2023.
-
-\bibitem{chatgptrobotics}
-S.~Vemprala, R.~Bonatti, A.~Bucker, and A.~Kapoor, ``{ChatGPT} for
-robotics: Design principles and model abilities,'' \emph{IEEE Access},
-2024.
-
 \bibitem{palme}
 D.~Driess \emph{et~al.}, ``{PaLM-E}: An embodied multimodal language
 model,'' in \emph{Proc. Int. Conf. Machine Learning (ICML)}, 2023.
-
 \bibitem{rt2}
 A.~Brohan \emph{et~al.}, ``{RT-2}: Vision-language-action models transfer
 web knowledge to robotic control,'' in \emph{Proc. Conf. Robot Learning
 (CoRL)}, 2023.
-
 \bibitem{voxposer}
 W.~Huang \emph{et~al.}, ``{VoxPoser}: Composable {3D} value maps for robotic
 manipulation with language models,'' in \emph{Proc. Conf. Robot Learning
 (CoRL)}, 2023.
-
+\bibitem{llmrobosurvey}
+F.~Zeng, W.~Gan, Y.~Wang, N.~Liu, and P.~S.~Yu, ``Large language models for
+robotics: A survey,'' \emph{arXiv preprint} arXiv:2311.07226, 2023.
 \bibitem{react}
 S.~Yao \emph{et~al.}, ``{ReAct}: Synergizing reasoning and acting in
 language models,'' in \emph{Proc. Int. Conf. Learning Representations
 (ICLR)}, 2023.
-
 \bibitem{toolformer}
 T.~Schick \emph{et~al.}, ``{Toolformer}: Language models can teach
 themselves to use tools,'' in \emph{Advances in Neural Information
 Processing Systems (NeurIPS)}, 2023.
-
-\bibitem{llmrobosurvey}
-F.~Zeng, W.~Gan, Y.~Wang, N.~Liu, and P.~S.~Yu, ``Large language models for
-robotics: A survey,'' \emph{arXiv preprint} arXiv:2311.07226, 2023.
-
+\bibitem{innermonologue}
+W.~Huang \emph{et~al.}, ``Inner monologue: Embodied reasoning through
+planning with language models,'' in \emph{Proc. Conf. Robot Learning
+(CoRL)}, 2022.
+\bibitem{chatgptrobotics}
+S.~Vemprala, R.~Bonatti, A.~Bucker, and A.~Kapoor, ``{ChatGPT} for
+robotics: Design principles and model abilities,'' \emph{IEEE Access},
+2024.
 \bibitem{ros2}
 S.~Macenski, T.~Foote, B.~Gerkey, C.~Lalancette, and W.~Woodall, ``Robot
 operating system 2: Design, architecture, and uses in the wild,''
 \emph{Science Robotics}, vol.~7, no.~66, 2022.
-
 \bibitem{nav2}
 S.~Macenski, F.~Mart\'in, R.~White, and J.~Ginés~Clavero, ``The marathon
 2: A navigation system,'' in \emph{Proc. IEEE/RSJ Int. Conf. Intelligent
 Robots and Systems (IROS)}, 2020.
-
 \bibitem{moveit}
 D.~Coleman, I.~\c{S}ucan, S.~Chitta, and N.~Correll, ``Reducing the
 barrier to entry of complex robotic software: A {MoveIt!} case study,''
 \emph{J. Software Engineering for Robotics}, 2014.
-
 \bibitem{yolov8}
 G.~Jocher, A.~Chaurasia, and J.~Qiu, ``Ultralytics {YOLOv8},'' 2023.
 [Online]. Available: \url{https://github.com/ultralytics/ultralytics}
-
 \end{thebibliography}
 
 \end{document}
